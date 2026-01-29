@@ -257,7 +257,7 @@ export async function updateLastActive(userId: string): Promise<void> {
 // Activity Tracking
 // ============================================
 
-export type ActivityType = 'signup' | 'login' | 'pin_created' | 'subscription_change' | 'settings_update';
+export type ActivityType = 'signup' | 'login' | 'pin_created' | 'subscription_change' | 'settings_update' | 'status_change' | 'account_deletion';
 
 export interface Activity {
     id: string;
