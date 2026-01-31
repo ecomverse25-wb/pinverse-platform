@@ -155,7 +155,7 @@ export default function PinFactory({ articles }: PinFactoryProps) {
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
+            <Card className="bg-white dark:bg-slate-950">
                 <CardHeader>
                     <CardTitle>Pin Factory Queue</CardTitle>
                 </CardHeader>
@@ -182,14 +182,14 @@ export default function PinFactory({ articles }: PinFactoryProps) {
                 </CardContent>
             </Card>
 
-            <Card>
+            <Card className="bg-white dark:bg-slate-950">
                 <CardHeader>
                     <CardTitle>Results</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {results.length > 0 ? (
                         <div className="space-y-4">
-                            <div className="bg-green-500/10 text-green-600 p-4 rounded-lg border border-green-500/20 text-center">
+                            <div className="bg-green-50 text-green-700 p-4 rounded-lg border border-green-200 text-center">
                                 <h3 className="font-bold text-lg">{results.length} Pins Created!</h3>
                                 <p className="text-sm">Ready for export.</p>
                             </div>
@@ -199,7 +199,7 @@ export default function PinFactory({ articles }: PinFactoryProps) {
                             </Button>
                         </div>
                     ) : (
-                        <div className="h-40 flex items-center justify-center border-2 border-dashed rounded-lg text-muted-foreground">
+                        <div className="h-40 flex items-center justify-center border-2 border-dashed border-slate-200 rounded-lg text-slate-400">
                             Waiting for generation...
                         </div>
                     )}

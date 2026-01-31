@@ -32,7 +32,7 @@ export async function saveKeywordFileAction(filename: string, content: KeywordCl
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-        return { error: "User not authenticated" };
+        return { error: "Auth Error: User not authenticated" };
     }
 
     const { data, error } = await supabase
@@ -47,7 +47,7 @@ export async function saveKeywordFileAction(filename: string, content: KeywordCl
 
     if (error) {
         console.error("Save Keyword Error:", error);
-        return { error: error.message };
+        return { error: `DB Error: ${error.message}` };
     }
     return { success: true, data };
 }
@@ -86,7 +86,7 @@ export async function saveProductsAction(products: Product[], batchName: string 
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-        return { error: "User not authenticated" };
+        return { error: "Auth Error: User not logged in." };
     }
 
     const rows = products.map(p => ({
@@ -104,7 +104,7 @@ export async function saveProductsAction(products: Product[], batchName: string 
 
     if (error) {
         console.error("Save Products Error:", error);
-        return { error: error.message };
+        return { error: `DB Insert Error: ${error.message} (Code: ${error.code})` };
     }
     return { success: true, data };
 }

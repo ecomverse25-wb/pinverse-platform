@@ -59,10 +59,10 @@ export default function ContentEngine({ clusters, products, apiKey, wpCredential
 
         // 2. Construct Prompt
         const productHTML = matched.map(p =>
-            `<div class="product-card">
-                <img src="${p.image}" alt="${p.name}" />
-                <h3>${p.name}</h3>
-                <a href="${p.link}" class="btn">Check Price</a>
+            `<div class="my-6 p-4 border rounded-lg shadow-sm bg-white max-w-sm mx-auto">
+                <img src="${p.image}" alt="${p.name}" class="w-full h-64 object-cover rounded-md mb-4" />
+                <h3 class="font-bold text-lg mb-2 text-slate-900">${p.name}</h3>
+                <a href="${p.link}" class="inline-block bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium hover:bg-primary/90 transition-colors no-underline">Check Price</a>
              </div>`
         ).join("\n");
 
@@ -160,7 +160,7 @@ export default function ContentEngine({ clusters, products, apiKey, wpCredential
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left: Topic Selector */}
-            <Card className="col-span-1">
+            <Card className="col-span-1 bg-white dark:bg-slate-950">
                 <CardHeader>
                     <CardTitle>Select Topic</CardTitle>
                 </CardHeader>
@@ -170,10 +170,10 @@ export default function ContentEngine({ clusters, products, apiKey, wpCredential
                             <div
                                 key={i}
                                 onClick={() => setSelectedTopic(c)}
-                                className={`p-3 mb-2 rounded-lg cursor-pointer border transition-colors ${selectedTopic?.topic === c.topic ? 'bg-primary/10 border-primary' : 'hover:bg-secondary'}`}
+                                className={`p-3 mb-2 rounded-lg cursor-pointer border transition-colors ${selectedTopic?.topic === c.topic ? 'bg-primary/10 border-primary' : 'hover:bg-slate-100'} text-slate-900 border-slate-200`}
                             >
                                 <div className="font-semibold">{c.topic}</div>
-                                <div className="text-xs text-muted-foreground">{c.keywords.length} keywords</div>
+                                <div className="text-xs text-slate-500">{c.keywords.length} keywords</div>
                             </div>
                         ))}
                     </ScrollArea>
@@ -181,15 +181,15 @@ export default function ContentEngine({ clusters, products, apiKey, wpCredential
             </Card>
 
             {/* Middle: Generator & Preview */}
-            <Card className="col-span-2">
+            <Card className="col-span-2 bg-white dark:bg-slate-950">
                 <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle>Content Studio</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="flex gap-4 items-center bg-slate-50 dark:bg-slate-900 p-4 rounded-lg">
+                    <div className="flex gap-4 items-center bg-slate-50 border border-slate-100 p-4 rounded-lg">
                         <div className="flex-1">
-                            <span className="text-sm font-medium text-muted-foreground">Chosen Topic: </span>
-                            <span className="font-bold text-lg">{selectedTopic?.topic || "None"}</span>
+                            <span className="text-sm font-medium text-slate-500">Chosen Topic: </span>
+                            <span className="font-bold text-lg text-slate-900">{selectedTopic?.topic || "None"}</span>
                         </div>
                         <Button
                             onClick={handleGenerate}
@@ -204,9 +204,9 @@ export default function ContentEngine({ clusters, products, apiKey, wpCredential
                     {/* Generated Articles List */}
                     <div className="space-y-4 mt-6">
                         {articles.map((article, idx) => (
-                            <Card key={idx} className="overflow-hidden border-accent/20">
-                                <div className="bg-secondary/30 p-3 border-b flex justify-between items-center">
-                                    <h3 className="font-bold truncate max-w-md">{article.title}</h3>
+                            <Card key={idx} className="overflow-hidden border-slate-200 bg-white">
+                                <div className="bg-slate-50 p-3 border-b border-slate-200 flex justify-between items-center px-4">
+                                    <h3 className="font-bold truncate max-w-md text-slate-900">{article.title}</h3>
                                     <div className="flex gap-2">
                                         <Button
                                             size="sm"
@@ -221,7 +221,8 @@ export default function ContentEngine({ clusters, products, apiKey, wpCredential
                                         </Button>
                                     </div>
                                 </div>
-                                <div className="p-4 max-h-60 overflow-y-auto text-sm prose prose-sm dark:prose-invert">
+                                {/* White background enforced for article content for better readability */}
+                                <div className="p-8 max-h-[600px] overflow-y-auto text-base prose prose-slate max-w-none bg-white text-slate-900 rounded-b-lg shadow-inner">
                                     <div dangerouslySetInnerHTML={{ __html: article.content }} />
                                 </div>
                             </Card>
