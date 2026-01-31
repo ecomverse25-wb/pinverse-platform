@@ -6,7 +6,10 @@ export function createClient() {
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
     if (!supabaseUrl || !supabaseAnonKey) {
-        throw new Error('Missing Supabase environment variables')
+        console.error('Supabase Client: Missing Environment Variables')
+        // We cannot throw here or the whole app crashes on client side
+        // Return a mock or minimal client to prevent white screen
+        return createBrowserClient("https://placeholder.supabase.co", "placeholder")
     }
 
     return createBrowserClient(supabaseUrl, supabaseAnonKey)
