@@ -8,9 +8,11 @@ const inter = Inter({
   subsets: ["latin"],
 });
 
+import { Toaster } from "@/components/ui/toaster";
+
 export const metadata: Metadata = {
-  title: "PinVerse - Pinterest Marketing Tools for Creators",
-  description: "Powerful Pinterest marketing automation tools. Create bulk pins, schedule content, and grow your Pinterest traffic with AI-powered tools.",
+  title: "PinVerse Platform",
+  description: "Advanced Pinterest Operations",
   keywords: "Pinterest, marketing, bulk pins, automation, Pinterest tools, content creator, Pinterest scheduler",
   authors: [{ name: "Ecomverse LLC" }],
   openGraph: {
@@ -37,6 +39,7 @@ export default function RootLayout({
       <body className={`${inter.variable} antialiased`}>
         <ThemeProvider>
           {children}
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

@@ -33,12 +33,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, customRu
     const [localPinsPerDay, setLocalPinsPerDay] = useState(csvSettings.pinsPerDay);
 
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-    const [hasInitialized, setHasInitialized] = useState(false);
+    // const [hasInitialized, setHasInitialized] = useState(false);
 
-    // Reset local state ONLY when modal opens (not when props change while open)
+
+    // Reset local state when modal opens
     useEffect(() => {
-        if (isOpen && !hasInitialized) {
+        if (isOpen) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setLocalTextRules(customRules);
+
             setLocalImageRules(imageRules);
             setLocalReplicateKey(replicateApiKey);
             setLocalGoogleKey(googleApiKey);
@@ -49,11 +52,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, customRu
             setLocalPostInterval(csvSettings.postInterval);
             setLocalPinsPerDay(csvSettings.pinsPerDay);
             setSaveStatus('idle');
-            setHasInitialized(true);
-        } else if (!isOpen) {
-            setHasInitialized(false);
         }
-    }, [isOpen, hasInitialized, customRules, imageRules, defaultConfig, replicateApiKey, googleApiKey, csvSettings]);
+    }, [isOpen, customRules, imageRules, defaultConfig, replicateApiKey, googleApiKey, csvSettings]);
 
     if (!isOpen) return null;
 

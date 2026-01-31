@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Wrench, Settings, CreditCard, LogOut, Menu, X, Sun, Moon, Shield } from "lucide-react";
+import { LayoutDashboard, Wrench, Settings, CreditCard, LogOut, Menu, X, Sun, Moon, Shield, FileText } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getUser, signOut } from "@/lib/supabase";
 import { isAdmin } from "@/lib/admin";
@@ -46,6 +46,7 @@ export default function DashboardLayout({
 
     const navigation = [
         { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+        { name: "Master Writer", href: "/dashboard/tools/article-writer", icon: FileText },
         { name: "Tools", href: "/dashboard/tools", icon: Wrench },
         { name: "Account", href: "/dashboard/account", icon: Settings },
         { name: "Billing", href: "/dashboard/billing", icon: CreditCard },

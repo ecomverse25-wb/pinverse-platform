@@ -10,6 +10,7 @@ import InputSection from '@/components/bulk-pin/InputSection';
 import PinCard from '@/components/bulk-pin/PinCard';
 import CSVEditor from '@/components/bulk-pin/CSVEditor';
 import ChatBot from '@/components/bulk-pin/ChatBot';
+import { getUserSettingsAction, updateUserSettingsAction } from "@/app/actions/user-settings-actions";
 import SettingsModal from '@/components/bulk-pin/SettingsModal';
 
 const DEFAULT_TEXT_RULES = `You're a Pinterest content writer optimizing for maximum search visibility and clicks.
@@ -44,9 +45,15 @@ export default function BulkPinCreatorPage() {
 
 
     useEffect(() => {
-        setGoogleApiKey(localStorage.getItem('pinverse_google_api_key') || '');
-        setReplicateApiKey(localStorage.getItem('pinverse_replicate_api_key') || '');
-        setImgbbApiKey(localStorage.getItem('pinverse_imgbb_api_key') || '');
+        // Load API Keys from DB
+        getUserSettingsAction().then(({ settings }) => {
+            if (settings) {
+                setGoogleApiKey(settings.gemini_api_key || '');
+                setReplicateApiKey(settings.replicate_api_key || '');
+                setImgbbApiKey(settings.imgbb_api_key || '');
+            }
+        });
+
         const savedConfig = localStorage.getItem('pinverse_pin_config');
         if (savedConfig) try { setConfig(JSON.parse(savedConfig)); } catch { }
         const savedTextRules = localStorage.getItem('pinverse_text_rules');
@@ -71,7 +78,7 @@ export default function BulkPinCreatorPage() {
 
 
 
-    const handleSaveSettings = (newTextRules: string, newImageRules: string, newConfig: PinConfig, newReplicateKey: string, newGoogleKey: string, newCsvSettings: CSVSettings) => {
+    const handleSaveSettings = async (newTextRules: string, newImageRules: string, newConfig: PinConfig, newReplicateKey: string, newGoogleKey: string, newCsvSettings: CSVSettings) => {
         setTextRules(newTextRules);
         setImageRules(newImageRules);
         setConfig(newConfig);
@@ -79,13 +86,24 @@ export default function BulkPinCreatorPage() {
         setGoogleApiKey(newGoogleKey);
         setCsvSettings(newCsvSettings);
         setImgbbApiKey(newCsvSettings.imgbbApiKey);
+
+        // Save Rules to LocalStorage (User Preference)
         localStorage.setItem('pinverse_text_rules', newTextRules);
         localStorage.setItem('pinverse_image_rules', newImageRules);
         localStorage.setItem('pinverse_pin_config', JSON.stringify(newConfig));
-        localStorage.setItem('pinverse_replicate_api_key', newReplicateKey);
-        localStorage.setItem('pinverse_google_api_key', newGoogleKey);
         localStorage.setItem('pinverse_csv_settings', JSON.stringify(newCsvSettings));
-        localStorage.setItem('pinverse_imgbb_api_key', newCsvSettings.imgbbApiKey);
+
+        // Save Keys to Database
+        await updateUserSettingsAction({
+            gemini_api_key: newGoogleKey,
+            replicate_api_key: newReplicateKey,
+            imgbb_api_key: newCsvSettings.imgbbApiKey
+        });
+
+        // Clean up old local storage keys
+        localStorage.removeItem('pinverse_replicate_api_key');
+        localStorage.removeItem('pinverse_google_api_key');
+        localStorage.removeItem('pinverse_imgbb_api_key');
     };
 
     const handleGeneratePrompts = async (urls: string[], pinConfig: PinConfig) => {

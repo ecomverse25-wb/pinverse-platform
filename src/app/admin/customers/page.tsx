@@ -18,7 +18,8 @@ import {
     Download,
     Loader2
 } from "lucide-react";
-import { fetchAllUsers, updateUserStatus, UserProfile } from "@/lib/adminData";
+import { fetchAllUsersAction, updateUserStatusAction } from "@/app/actions/admin-actions";
+import { UserProfile } from "@/app/admin/types";
 
 export default function CustomersPage() {
     const [users, setUsers] = useState<UserProfile[]>([]);
@@ -38,7 +39,7 @@ export default function CustomersPage() {
 
     const loadUsers = async () => {
         setLoading(true);
-        const { users: fetchedUsers, error: fetchError } = await fetchAllUsers();
+        const { users: fetchedUsers, error: fetchError } = await fetchAllUsersAction();
         if (fetchError) {
             setError(fetchError);
         } else {
@@ -50,7 +51,7 @@ export default function CustomersPage() {
     // Handle status toggle
     const handleStatusToggle = async (userId: string, currentStatus: string) => {
         const newStatus = currentStatus === 'suspended' ? 'active' : 'suspended';
-        const { success, error } = await updateUserStatus(userId, newStatus as 'active' | 'suspended');
+        const { success, error } = await updateUserStatusAction(userId, newStatus as 'active' | 'suspended');
         if (success) {
             // Refresh users
             loadUsers();

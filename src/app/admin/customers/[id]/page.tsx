@@ -22,7 +22,8 @@ import {
     X
 } from "lucide-react";
 import { fetchUserById, updateUserStatus, UserProfile, fetchUserActivities, Activity as UserActivity, formatRelativeTime } from "@/lib/adminData";
-import { updateUserPlanAction, deleteUserAction } from "@/app/admin/actions";
+import { updateUserPlanAction, deleteUserAction } from "@/app/actions/admin-actions";
+
 import { getUser } from "@/lib/supabase";
 
 export default function CustomerDetailPage() {
@@ -79,7 +80,8 @@ export default function CustomerDetailPage() {
     const handlePlanChange = async (newPlan: 'free' | 'pro' | 'enterprise') => {
         if (!customer || !adminUser) return;
         setActionLoading(true);
-        const result = await updateUserPlanAction(customer.id, newPlan, adminUser.email);
+        const result = await updateUserPlanAction(customer.id, newPlan);
+
         if (result.success) {
             setShowPlanModal(false);
             await loadCustomer();
@@ -92,7 +94,8 @@ export default function CustomerDetailPage() {
     const handleDeleteAccount = async () => {
         if (!customer || !adminUser) return;
         setActionLoading(true);
-        const result = await deleteUserAction(customer.id, adminUser.email);
+        const result = await deleteUserAction(customer.id);
+
         if (result.success) {
             router.push('/admin/customers');
         } else {
@@ -328,8 +331,8 @@ export default function CustomerDetailPage() {
                                     onClick={() => handlePlanChange(plan)}
                                     disabled={actionLoading}
                                     className={`w-full p-4 rounded-xl border flex items-center justify-between transition ${customer.plan === plan
-                                            ? 'bg-yellow-400/10 border-yellow-400 text-yellow-400'
-                                            : 'bg-slate-800/50 border-slate-700 hover:border-slate-500'
+                                        ? 'bg-yellow-400/10 border-yellow-400 text-yellow-400'
+                                        : 'bg-slate-800/50 border-slate-700 hover:border-slate-500'
                                         }`}
                                 >
                                     <div className="flex items-center gap-3">

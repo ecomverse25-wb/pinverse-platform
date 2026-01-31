@@ -1,0 +1,33 @@
+"use server";
+
+import { GoogleGenAI } from "@google/genai";
+import { GeneratedTextResponse, PinConfig } from "@/lib/types";
+
+// We re-implement or wrap the logic from geminiService here for Server Side usage.
+// Note: GoogleGenAI SDK works in Node environment.
+
+export async function generateArticleAction(prompt: string, apiKey: string) {
+    if (!apiKey) {
+        return { error: "API Key is missing." };
+    }
+
+    try {
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: { parts: [{ text: prompt }] }
+        });
+
+        if (response.text) {
+            return { success: true, content: response.text };
+        }
+        return { error: "No content generated." };
+    } catch (error: any) {
+        console.error("Server Action Error:", error);
+        const msg = error instanceof Error ? error.message : "Unknown error";
+        return { error: msg };
+    }
+}
+
+// We can add the sophisticated Pin Details generation here too if needed later,
+// using the same pattern.

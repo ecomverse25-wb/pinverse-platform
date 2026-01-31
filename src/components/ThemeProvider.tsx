@@ -20,7 +20,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         // Load theme from localStorage on mount
         const savedTheme = localStorage.getItem('pinverse_theme') as Theme;
         if (savedTheme === 'light' || savedTheme === 'dark') {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setThemeState(savedTheme);
+
         }
         setMounted(true);
     }, []);

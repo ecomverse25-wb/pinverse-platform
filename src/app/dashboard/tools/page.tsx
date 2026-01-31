@@ -4,6 +4,19 @@ import { Check, Lock, ArrowRight } from "lucide-react";
 export default function ToolsPage() {
     const tools = [
         {
+            id: "article-writer",
+            name: "PinVerse Master Writer",
+            description: "Turn keywords into SEO articles and Pinterest assets in 3 simple steps.",
+            features: [
+                "Pinterest Trend Research",
+                "Keyword Clustering",
+                "SEO Article Generation",
+                "Auto-Pin Factory"
+            ],
+            status: "available",
+            href: "/dashboard/tools/article-writer",
+        },
+        {
             id: "bulk-pin-creator",
             name: "Bulk Pin Creator",
             description: "Generate hundreds of Pinterest pins with AI-powered titles, descriptions, and images. Export as CSV for bulk upload.",
