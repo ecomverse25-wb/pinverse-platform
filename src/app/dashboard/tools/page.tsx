@@ -38,8 +38,8 @@ export default function ToolsPage() {
                 "Best time analysis",
                 "Multi-board support",
             ],
-            status: "coming_soon",
-            href: "#",
+            status: "available",
+            href: "/dashboard/tools/pinterest-scheduler",
         },
         {
             id: "keyword-research",
@@ -62,8 +62,8 @@ export default function ToolsPage() {
                 "Traffic tracking",
                 "Growth metrics",
             ],
-            status: "coming_soon",
-            href: "#",
+            status: "available",
+            href: "/dashboard/tools/analytics",
         },
     ];
 
