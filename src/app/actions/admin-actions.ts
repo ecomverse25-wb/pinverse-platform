@@ -33,6 +33,7 @@ export async function fetchAdminMetricsAction(): Promise<{ metrics: AdminMetrics
     try {
         await checkAdmin();
         const supabase = createSupabaseAdmin(); // Use Admin client to bypass RLS if needed for global stats
+        if (!supabase) throw new Error("Supabase Admin client initialization failed");
 
         const { data: profiles, error } = await supabase
             .from('profiles')
@@ -92,6 +93,7 @@ export async function fetchRecentActivitiesAction(limit: number = 10) {
     try {
         await checkAdmin();
         const supabase = createSupabaseAdmin();
+        if (!supabase) throw new Error("Supabase Admin client initialization failed");
         const { data, error } = await supabase
             .from('activities')
             .select('*')
@@ -109,6 +111,7 @@ export async function fetchAllUsersAction() {
     try {
         await checkAdmin();
         const supabase = createSupabaseAdmin();
+        if (!supabase) throw new Error("Supabase Admin client initialization failed");
         const { data, error } = await supabase
             .from('profiles')
             .select('*')
@@ -144,6 +147,7 @@ export async function logActivityAction(
 ) {
     // Internal use or called by other actions
     const supabase = createSupabaseAdmin();
+    if (!supabase) return; // Fail silently for logging if system is down
     await supabase.from('activities').insert({
         user_id: userId,
         user_email: userEmail,
@@ -157,6 +161,7 @@ export async function updateUserStatusAction(userId: string, status: 'active' | 
     try {
         const adminUser = await checkAdmin();
         const supabase = createSupabaseAdmin();
+        if (!supabase) throw new Error("Supabase Admin client initialization failed");
         const { error } = await supabase
             .from('profiles')
             .update({ status })
@@ -176,6 +181,7 @@ export async function updateUserPlanAction(userId: string, plan: 'free' | 'pro' 
     try {
         const adminUser = await checkAdmin();
         const supabase = createSupabaseAdmin();
+        if (!supabase) throw new Error("Supabase Admin client initialization failed");
         const { error } = await supabase
             .from('profiles')
             .update({ plan })
@@ -195,6 +201,7 @@ export async function deleteUserAction(userId: string) {
     try {
         const adminUser = await checkAdmin();
         const supabase = createSupabaseAdmin();
+        if (!supabase) throw new Error("Supabase Admin client initialization failed");
         const { error } = await supabase.auth.admin.deleteUser(userId);
 
         if (error) throw error;
@@ -210,6 +217,7 @@ export async function fetchDailyStatsAction() {
     try {
         await checkAdmin();
         const supabase = createSupabaseAdmin();
+        if (!supabase) throw new Error("Supabase Admin client initialization failed");
 
         // Simplified Logic: In production, better to use a dedicated stats table or SQL view
         // For now, mirroring the logic from adminData.ts
@@ -258,6 +266,7 @@ export async function fetchUserActivitiesAction(userId: string) {
     try {
         await checkAdmin();
         const supabase = createSupabaseAdmin();
+        if (!supabase) throw new Error("Supabase Admin client initialization failed");
         const { data, error } = await supabase
             .from('activities')
             .select('*')

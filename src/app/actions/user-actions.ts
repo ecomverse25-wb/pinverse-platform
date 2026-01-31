@@ -109,6 +109,83 @@ export async function saveProductsAction(products: Product[], batchName: string 
     return { success: true, data };
 }
 
+export async function getUserProductBatchesAction() {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Auth Error" };
+
+    // We want to group by batch_name and created_at to show "files"
+    // Since we don't have a separate 'batches' table, we can distinct on batch_name/created_at
+    // But this depends on exact timestamp matching. 
+    // A better approach for the future is a separate table, but for now we'll query all and group in JS or use distinct.
+
+    // Let's rely on the client or a distinct query if possible.
+    // Supabase supports .select('batch_name, created_at').distinct()
+
+    // However, knowing how accurate the timestamp is, let's just fetch all mostly-recent products and group them? 
+    // Or just simple distinct.
+
+    const { data, error } = await supabase
+        .from('user_products')
+        .select('batch_name, created_at')
+        // We need a way to group. 
+        // If we can't do distinct easily without a raw query, we fetch relevant columns 
+        // and unique them in JS (not efficient for huge datasets but fine for <1000 rows).
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error("Get Product Batches Error:", error);
+        return { error: error.message };
+    }
+
+    // Group by unique batch_name + created_at combinations
+    const uniqueBatches = new Map();
+    data.forEach((item: any) => {
+        const key = `${item.batch_name}-${item.created_at}`;
+        if (!uniqueBatches.has(key)) {
+            uniqueBatches.set(key, item);
+        }
+    });
+
+    return { success: true, data: Array.from(uniqueBatches.values()) };
+}
+
+export async function getProductsInBatchAction(batchName: string, createdAt: string) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Auth Error" };
+
+    const { data, error } = await supabase
+        .from('user_products')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('batch_name', batchName)
+        .eq('created_at', createdAt);
+
+    if (error) return { error: error.message };
+    return { success: true, data: data as DBProduct[] };
+}
+
+export async function deleteProductBatchAction(batchName: string, createdAt: string) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Auth Error" };
+
+    const { error } = await supabase
+        .from('user_products')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('batch_name', batchName)
+        .eq('created_at', createdAt);
+
+    if (error) return { error: error.message };
+    return { success: true };
+}
+
 // --- Prompts ---
 
 export async function savePromptAction(category: string, text: string) {
