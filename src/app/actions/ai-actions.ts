@@ -6,15 +6,17 @@ import { GeneratedTextResponse, PinConfig } from "@/lib/types";
 // We re-implement or wrap the logic from geminiService here for Server Side usage.
 // Note: GoogleGenAI SDK works in Node environment.
 
-export async function generateArticleAction(prompt: string, apiKey: string) {
+export async function generateArticleAction(prompt: string, apiKey: string, model: string = "gemini-1.5-flash") {
     if (!apiKey) {
         return { error: "API Key is missing." };
     }
 
     try {
         const ai = new GoogleGenAI({ apiKey });
+        // Handle "Gemini 2.0" naming if needed, or pass through. 
+        // Note: Google SDK might need specific mapping, but usually "gemini-1.5-flash" works.
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: model,
             contents: { parts: [{ text: prompt }] }
         });
 

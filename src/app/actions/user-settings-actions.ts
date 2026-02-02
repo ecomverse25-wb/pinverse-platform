@@ -47,15 +47,37 @@ export async function updateUserSettingsAction(settings: UserSettings) {
             return { success: false, error: "User not authenticated" };
         }
 
-        const { error } = await supabase
+        // 1. Check if settings exist for this user
+        const { data: existing, error: fetchError } = await supabase
             .from('user_settings')
-            .upsert({
-                user_id: user.id,
-                ...settings,
-                updated_at: new Date().toISOString()
-            });
+            .select('id')
+            .eq('user_id', user.id)
+            .single();
 
-        if (error) throw error;
+        if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is 'not found'
+            throw fetchError;
+        }
+
+        if (existing) {
+            // 2. Update existing (Patch)
+            const { error } = await supabase
+                .from('user_settings')
+                .update({
+                    ...settings,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('user_id', user.id);
+            if (error) throw error;
+        } else {
+            // 3. Insert new
+            const { error } = await supabase
+                .from('user_settings')
+                .insert({
+                    user_id: user.id,
+                    ...settings
+                });
+            if (error) throw error;
+        }
 
         return { success: true, error: null };
     } catch (error: any) {

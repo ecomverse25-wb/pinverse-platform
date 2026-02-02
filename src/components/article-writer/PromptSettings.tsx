@@ -58,7 +58,7 @@ export default function PromptSettings() {
                         <textarea
                             value={prompts[selectedCategory]}
                             onChange={(e) => updatePrompt(selectedCategory, e.target.value)}
-                            className="w-full h-96 p-4 font-mono text-xs border rounded-md bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-primary outline-none resize-y"
+                            className="w-full h-96 p-4 font-mono text-xs border rounded-md bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-primary outline-none resize-y"
                             placeholder="Enter AI instructions..."
                         />
                         <div className="flex justify-between text-xs text-muted-foreground">

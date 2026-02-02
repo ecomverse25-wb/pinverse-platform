@@ -192,30 +192,80 @@ export default function KeywordStrategy({ clusters, setClusters, products, setPr
         }
     };
 
+    // --- Strict Parsers ---
     const processProductData = async (data: any[], filename: string) => {
-        // Helper to safely get value from object with case-insensitive check
-        const getValue = (obj: any, keys: string[]) => {
-            if (Array.isArray(obj)) return undefined;
-            for (const key of keys) {
-                const val = obj[key];
-                if (val !== undefined && val !== null && val !== '') return String(val).trim();
-
-                const foundKey = Object.keys(obj).find(k => k.toLowerCase() === key.toLowerCase());
-                if (foundKey && obj[foundKey] !== undefined && obj[foundKey] !== null) return String(obj[foundKey]).trim();
-            }
-            return '';
+        // --- Helper: Normalize Header ---
+        const normalizeHeader = (header: string): string => {
+            return String(header || '')
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9]/g, '')
+                .replace(/\s+/g, '');
         };
 
-        const parsedProducts: Product[] = data.map((row: any) => {
-            const name = getValue(row, ['name', 'product name', 'title', 'product_name']) || (Array.isArray(row) ? String(row[0] || '') : '');
-            const link = getValue(row, ['link', 'url', 'product link', 'product_url', 'affiliate_link']) || (Array.isArray(row) ? String(row[1] || '') : '');
-            const image = getValue(row, ['image', 'image_url', 'image url', 'img', 'src']) || (Array.isArray(row) ? String(row[2] || '') : '');
+        const HEADER_ALIASES = {
+            name: ['name', 'productname', 'title', 'product', 'itemname', 'item', 'label'],
+            link: ['link', 'url', 'productlink', 'producturl', 'affiliatelink', 'href', 'destinationurl', 'permalink'],
+            image: ['image', 'imageurl', 'img', 'picture', 'photo', 'thumbnail', 'src', 'imagesrc']
+        };
 
-            return { name, link, image };
-        }).filter((p: Product) => p.name && p.name.length > 1); // Loosened validation
+        const getValue = (obj: any, category: keyof typeof HEADER_ALIASES) => {
+            const possibleKeys = HEADER_ALIASES[category];
+
+            // 1. Try mapping via keys
+            for (const objKey of Object.keys(obj)) {
+                const normalized = normalizeHeader(objKey);
+                if (possibleKeys.some(pk => normalizeHeader(pk) === normalized)) {
+                    const val = obj[objKey];
+                    if (val && String(val).trim().length > 0) {
+                        return String(val).trim();
+                    }
+                }
+            }
+            return undefined;
+        };
+
+        // --- 1. Filter Invalid Rows First ---
+        const validRows = data.filter((row: any) => {
+            // Must have at least SOME data
+            return row && typeof row === 'object' && Object.values(row).some(v => v && String(v).trim().length > 0);
+        });
+
+        // --- 2. Map Data ---
+        const parsedProducts: Product[] = validRows.map((row: any) => {
+            let name = getValue(row, 'name');
+            let link = getValue(row, 'link');
+            let image = getValue(row, 'image');
+
+            // Fallback for Array-based rows (no headers)
+            if (Array.isArray(row)) {
+                name = String(row[0] || '');
+                link = String(row[1] || '');
+                image = String(row[2] || '');
+            } else if (!name && !link && !image) {
+                // Extreme fallback: assume positional if keys failed completely but it's an object with values
+                const values = Object.values(row);
+                if (values.length >= 3) {
+                    name = String(values[0]);
+                    link = String(values[1]);
+                    image = String(values[2]);
+                }
+            }
+
+            return { name: name || '', link: link || '', image: image || '' };
+        }).filter((p: Product) => p.name && p.name.length > 1 && (p.link.length > 4 || p.image.length > 4));
 
         if (parsedProducts.length === 0) {
-            toast({ title: "No Products Found", description: "Could not identify products. Check headers: Name, Link, Image.", variant: "destructive" });
+            // Show user WHAT headers were found for debugging
+            const firstRow = data[0] || {};
+            const foundHeaders = Object.keys(firstRow).join(", ");
+            console.error("Found headers:", foundHeaders);
+
+            toast({
+                title: "No Valid Products Found",
+                description: `Checked ${data.length} rows. Expected headers: Name, Link, Image. Found: ${foundHeaders.substring(0, 50)}...`,
+                variant: "destructive"
+            });
             return;
         }
 
@@ -312,21 +362,23 @@ export default function KeywordStrategy({ clusters, setClusters, products, setPr
                                         <div
                                             key={file.id}
                                             onClick={() => handleLoadFile(file)}
-                                            className="flex justify-between items-center p-2 text-sm hover:bg-muted/50 cursor-pointer rounded group transition-colors"
+                                            className="flex items-center gap-3 p-2 text-sm hover:bg-muted/50 cursor-pointer rounded group transition-colors"
                                         >
-                                            <div className="flex items-center gap-2">
-                                                <Save className="w-3 h-3 text-muted-foreground" />
-                                                <span>{file.filename}</span>
-                                                <span className="text-xs text-muted-foreground">({new Date(file.created_at).toLocaleDateString()})</span>
-                                            </div>
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
+                                                className="h-6 w-6 p-0 text-red-500 hover:bg-red-50 dark:hover:bg-red-950 shrink-0"
                                                 onClick={(e) => handleDeleteFile(file.id, e)}
+                                                title="Delete File"
                                             >
-                                                <Trash2 className="w-3 h-3" />
+                                                <Trash2 className="w-4 h-4" />
                                             </Button>
+
+                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                <Save className="w-3 h-3 text-emerald-500 shrink-0" />
+                                                <span className="truncate font-medium">{file.filename}</span>
+                                                <span className="text-xs text-muted-foreground shrink-0">({new Date(file.created_at).toLocaleDateString()})</span>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -351,12 +403,39 @@ export default function KeywordStrategy({ clusters, setClusters, products, setPr
 
                     {clusters.length > 0 && (
                         <div className="bg-muted/30 p-4 rounded-md flex-1 min-h-[150px] overflow-y-auto border border-border">
-                            <h4 className="font-semibold mb-2 text-foreground">Active Clusters ({clusters.length})</h4>
+                            <div className="flex justify-between items-center mb-2">
+                                <h4 className="font-semibold text-foreground">Active Clusters ({clusters.length})</h4>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        if (confirm("Clear all active clusters?")) setClusters([]);
+                                    }}
+                                    className="h-6 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                >
+                                    Clear All
+                                </Button>
+                            </div>
                             <ul className="space-y-2 text-sm">
                                 {clusters.map((c, i) => (
-                                    <li key={i} className="flex justify-between p-2 bg-card rounded border border-border shadow-sm">
-                                        <span className="text-foreground">{c.topic}</span>
-                                        <span className="text-muted-foreground">{c.keywords.length} kw</span>
+                                    <li key={i} className="flex justify-between items-center p-2 bg-card rounded border border-border shadow-sm group">
+                                        <div className="flex items-center gap-2 overflow-hidden">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 w-6 p-0 text-red-500 hover:bg-red-50 dark:hover:bg-red-950 shrink-0"
+                                                onClick={() => {
+                                                    const newClusters = [...clusters];
+                                                    newClusters.splice(i, 1);
+                                                    setClusters(newClusters);
+                                                }}
+                                                title="Delete Cluster"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                            <span className="text-foreground truncate font-medium bg-transparent border-none focus:outline-none">{c.topic}</span>
+                                        </div>
+                                        <span className="text-muted-foreground text-xs shrink-0 bg-secondary/50 px-2 py-0.5 rounded-full">{c.keywords.length} kw</span>
                                     </li>
                                 ))}
                             </ul>
@@ -385,21 +464,23 @@ export default function KeywordStrategy({ clusters, setClusters, products, setPr
                                         <div
                                             key={idx}
                                             onClick={() => handleLoadProductBatch(batch)}
-                                            className="flex justify-between items-center p-2 text-sm hover:bg-muted/50 cursor-pointer rounded group transition-colors"
+                                            className="flex items-center gap-3 p-2 text-sm hover:bg-muted/50 cursor-pointer rounded group transition-colors"
                                         >
-                                            <div className="flex items-center gap-2">
-                                                <Save className="w-3 h-3 text-muted-foreground" />
-                                                <span>{batch.batch_name}</span>
-                                                <span className="text-xs text-muted-foreground">({new Date(batch.created_at).toLocaleDateString()})</span>
-                                            </div>
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
+                                                className="h-6 w-6 p-0 text-red-500 hover:bg-red-50 dark:hover:bg-red-950 shrink-0"
                                                 onClick={(e) => handleDeleteProductBatch(batch, e)}
+                                                title="Delete List"
                                             >
-                                                <Trash2 className="w-3 h-3" />
+                                                <Trash2 className="w-4 h-4" />
                                             </Button>
+
+                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                <Save className="w-3 h-3 text-blue-500 shrink-0" />
+                                                <span className="truncate font-medium">{batch.batch_name}</span>
+                                                <span className="text-xs text-muted-foreground shrink-0">({new Date(batch.created_at).toLocaleDateString()})</span>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>

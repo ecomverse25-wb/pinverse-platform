@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase-server"; // Use server-side clients
-import { createAdminClient as createSupabaseAdmin } from "@/lib/supabase"; // For Service Role operations
+import { createAdminClient as createSupabaseAdmin } from "@/lib/supabase-admin"; // For Service Role operations
 import { isAdmin } from "@/lib/admin";
 import { UserProfile, AdminMetrics, MetricsChanges, Activity, DailyStat, ActivityType } from "@/app/admin/types";
 

@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { Check, Lock, ArrowRight } from "lucide-react";
+import { getVisibleToolsForCurrentUser } from "@/app/actions/tool-actions";
 
-export default function ToolsPage() {
+export default async function ToolsPage() {
+    const visibleTools = await getVisibleToolsForCurrentUser();
+    const visibleToolIds = new Set(visibleTools.map(t => t.id));
+
     const tools = [
         {
             id: "article-writer",
@@ -13,7 +17,7 @@ export default function ToolsPage() {
                 "SEO Article Generation",
                 "Auto-Pin Factory"
             ],
-            status: "available",
+            status: visibleToolIds.has("article-writer") ? "available" : "coming_soon",
             href: "/dashboard/tools/article-writer",
         },
         {
@@ -26,7 +30,7 @@ export default function ToolsPage() {
                 "CSV export with scheduling",
                 "ImgBB auto-upload",
             ],
-            status: "available",
+            status: visibleToolIds.has("bulk-pin-creator") ? "available" : "coming_soon",
             href: "/dashboard/tools/bulk-pin-creator",
         },
         {
@@ -38,7 +42,7 @@ export default function ToolsPage() {
                 "Best time analysis",
                 "Multi-board support",
             ],
-            status: "available",
+            status: visibleToolIds.has("pinterest-scheduler") ? "available" : "coming_soon",
             href: "/dashboard/tools/pinterest-scheduler",
         },
         {
@@ -50,7 +54,7 @@ export default function ToolsPage() {
                 "Competition analysis",
                 "SEO suggestions",
             ],
-            status: "coming_soon",
+            status: visibleToolIds.has("keyword-research") ? "available" : "coming_soon",
             href: "#",
         },
         {
@@ -62,7 +66,7 @@ export default function ToolsPage() {
                 "Traffic tracking",
                 "Growth metrics",
             ],
-            status: "available",
+            status: visibleToolIds.has("analytics") ? "available" : "coming_soon",
             href: "/dashboard/tools/analytics",
         },
     ];

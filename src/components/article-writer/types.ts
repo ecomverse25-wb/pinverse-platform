@@ -15,7 +15,7 @@ export interface ArticleData {
     content: string; // HTML
     heroImage?: string; // URL for Pin Factory
     wpLink?: string;
-    wpStatus?: 'draft' | 'publish' | 'failed' | 'unsent';
+    wpStatus?: 'draft' | 'publish' | 'published' | 'failed' | 'unsent';
 }
 
 export interface WPCredentials {

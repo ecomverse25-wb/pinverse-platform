@@ -13,23 +13,7 @@ export function createClient() {
     return createBrowserClient(supabaseUrl, supabaseAnonKey)
 }
 
-// Admin client for server-side privileged operations
-export function createAdminClient() {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    if (!supabaseUrl || !serviceRoleKey) {
-        console.error('Supabase Admin: Missing Environment Variables')
-        return null
-    }
-
-    return createSupabaseClient(supabaseUrl, serviceRoleKey, {
-        auth: {
-            autoRefreshToken: false,
-            persistSession: false
-        }
-    })
-}
 
 // Auth helper functions
 export async function signUp(email: string, password: string) {
@@ -80,10 +64,3 @@ export async function getUser() {
     return { user, error }
 }
 
-export async function getSession() {
-    const supabase = createClient()
-    if (!supabase) return { session: null, error: { message: "System Error: Database configuration missing." } as any }
-
-    const { data: { session }, error } = await supabase.auth.getSession()
-    return { session, error }
-}
