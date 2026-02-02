@@ -10,12 +10,20 @@ export async function middleware(request: NextRequest) {
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const isErrorPage = request.nextUrl.pathname === "/setup-error";
+
+    if ((!supabaseUrl || !supabaseAnonKey) && !isErrorPage) {
+        console.error("Middleware: Missing Env Vars -> Redirecting to /setup-error");
+        return NextResponse.redirect(new URL("/setup-error", request.url));
+    }
+
+    // If on error page and vars exist, go home
+    if (supabaseUrl && supabaseAnonKey && isErrorPage) {
+        return NextResponse.redirect(new URL("/", request.url));
+    }
 
     if (!supabaseUrl || !supabaseAnonKey) {
-        console.error("Middleware: Missing Supabase Environment Variables");
-        // If config is missing, we can't do auth, but we shouldn't crash via 500.
-        // Proceeding allows the page to load (blocking data access later).
-        return response;
+        return response; // Allow error page to load
     }
 
     const supabase = createServerClient(
