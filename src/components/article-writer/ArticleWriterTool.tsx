@@ -32,8 +32,8 @@ export interface ArticleData {
 
 // Model Options
 const AI_MODELS = [
-    { value: "gemini-1.5-pro", label: "Google Gemini 1.5 Pro (Best Quality)" },
-    { value: "gemini-1.5-flash", label: "Google Gemini 1.5 Flash (Fastest)" },
+    { value: "gemini-2.0-flash", label: "Google Gemini 2.0 Flash (Recommended)" },
+    { value: "gemini-2.5-pro", label: "Google Gemini 2.5 Pro (Advanced)" },
     { value: "replicate", label: "Replicate (Custom Models)" },
 ];
 
