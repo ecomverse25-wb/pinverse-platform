@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Enable standalone output for Electron bundling
+  output: 'standalone',
+
   webpack: (config, { isServer }) => {
     // If client-side, copy the PDF worker to the public folder
     if (!isServer) {
