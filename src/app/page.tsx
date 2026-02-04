@@ -6,18 +6,35 @@ import Pricing from "@/components/landing/Pricing";
 import Testimonials from "@/components/landing/Testimonials";
 import CTA from "@/components/landing/CTA";
 import Footer from "@/components/landing/Footer";
+import { getSiteContentAction } from "@/app/actions/content-actions";
 
-export default function Home() {
+export default async function Home() {
+  // Fetch content for all sections in parallel
+  const [
+    heroData,
+    featuresData,
+    pricingData,
+    testimonialsData,
+    footerData
+  ] = await Promise.all([
+    getSiteContentAction('hero'),
+    getSiteContentAction('features'),
+    getSiteContentAction('pricing'),
+    getSiteContentAction('testimonials'),
+    getSiteContentAction('footer')
+  ]);
+
   return (
     <div className="min-h-screen bg-[#0F172A]">
       <Navbar />
-      <Hero />
-      <Features />
+      <Hero content={heroData.content} />
+      <Features content={featuresData.content} />
       <Tools />
-      <Pricing />
-      <Testimonials />
+      <Pricing content={pricingData.content} />
+      <Testimonials content={testimonialsData.content} />
+      {/* CTA is usually static or part of Hero, but we can make it dynamic later if requested */}
       <CTA />
-      <Footer />
+      <Footer content={footerData.content} />
     </div>
   );
 }

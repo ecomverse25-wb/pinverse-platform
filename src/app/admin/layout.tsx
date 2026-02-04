@@ -9,7 +9,8 @@ import {
     ArrowLeft,
     Shield,
     Menu,
-    X
+    X,
+    FileText
 } from "lucide-react";
 import { useState } from "react";
 
@@ -28,6 +29,7 @@ export default function AdminLayout({
 
     const navigation = [
         { name: "Overview", href: "/admin", icon: LayoutDashboard },
+        { name: "Content", href: "/admin/content", icon: FileText },
         { name: "Customers", href: "/admin/customers", icon: Users },
         { name: "Analytics", href: "/admin/analytics", icon: BarChart3 },
     ];
