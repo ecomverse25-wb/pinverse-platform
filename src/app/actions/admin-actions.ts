@@ -32,8 +32,8 @@ async function checkAdmin() {
 export async function fetchAdminMetricsAction(): Promise<{ metrics: AdminMetrics; changes: MetricsChanges; error: string | null }> {
     try {
         await checkAdmin();
-        const supabase = createSupabaseAdmin(); // Use Admin client to bypass RLS if needed for global stats
-        if (!supabase) throw new Error("Supabase Admin client initialization failed");
+        const supabase = createSupabaseAdmin(); // Superseded by throw in util
+        // if (!supabase) throw new Error("Supabase Admin client initialization failed");
 
         const { data: profiles, error } = await supabase
             .from('profiles')

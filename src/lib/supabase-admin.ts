@@ -5,11 +5,13 @@ export function createAdminClient() {
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
     if (!supabaseUrl || !serviceRoleKey) {
-        console.error('Supabase Admin Init Error: Missing Environment Variables', {
-            url: !!supabaseUrl,
-            key: !!serviceRoleKey
-        })
-        return null
+        const missing = [];
+        if (!supabaseUrl) missing.push("NEXT_PUBLIC_SUPABASE_URL");
+        if (!serviceRoleKey) missing.push("SUPABASE_SERVICE_ROLE_KEY");
+
+        const errorMsg = `Supabase Admin Init Error: Missing variables: ${missing.join(", ")}`;
+        console.error(errorMsg);
+        throw new Error(errorMsg);
     }
 
     try {
@@ -21,6 +23,6 @@ export function createAdminClient() {
         })
     } catch (error) {
         console.error('Supabase Admin Init Failed:', error)
-        return null
+        throw new Error(`Supabase Admin Init Failed: ${(error as Error).message}`);
     }
 }
