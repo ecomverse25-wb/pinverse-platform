@@ -246,12 +246,12 @@ export default function ContentEditor() {
                                             <div className="grid grid-cols-2 gap-4">
                                                 <InputGroup label="Plan Name" value={plan.name} onChange={(v: string) => {
                                                     const newPlans = [...(pricing.plans || [])];
-                                                    newPlans[idx].name = v;
+                                                    newPlans[idx] = { ...newPlans[idx], name: v };
                                                     setPricing({ ...pricing, plans: newPlans });
                                                 }} />
                                                 <InputGroup label="Price" value={plan.price} onChange={(v: string) => {
                                                     const newPlans = [...(pricing.plans || [])];
-                                                    newPlans[idx].price = v;
+                                                    newPlans[idx] = { ...newPlans[idx], price: v };
                                                     setPricing({ ...pricing, plans: newPlans });
                                                 }} />
                                             </div>
@@ -259,7 +259,7 @@ export default function ContentEditor() {
                                             <div className="grid grid-cols-2 gap-4">
                                                 <InputGroup label="Period" value={plan.period} onChange={(v: string) => {
                                                     const newPlans = [...(pricing.plans || [])];
-                                                    newPlans[idx].period = v;
+                                                    newPlans[idx] = { ...newPlans[idx], period: v };
                                                     setPricing({ ...pricing, plans: newPlans });
                                                 }} />
                                                 <div className="mb-4">
@@ -268,7 +268,7 @@ export default function ContentEditor() {
                                                         value={plan.buttonStyle}
                                                         onChange={(e) => {
                                                             const newPlans = [...(pricing.plans || [])];
-                                                            newPlans[idx].buttonStyle = e.target.value as any;
+                                                            newPlans[idx] = { ...newPlans[idx], buttonStyle: e.target.value as any };
                                                             setPricing({ ...pricing, plans: newPlans });
                                                         }}
                                                         className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-400"
@@ -282,19 +282,19 @@ export default function ContentEditor() {
 
                                             <InputGroup label="Description" value={plan.description} onChange={(v: string) => {
                                                 const newPlans = [...(pricing.plans || [])];
-                                                newPlans[idx].description = v;
+                                                newPlans[idx] = { ...newPlans[idx], description: v };
                                                 setPricing({ ...pricing, plans: newPlans });
                                             }} />
 
                                             <div className="grid grid-cols-2 gap-4">
                                                 <InputGroup label="Button Text" value={plan.buttonText} onChange={(v: string) => {
                                                     const newPlans = [...(pricing.plans || [])];
-                                                    newPlans[idx].buttonText = v;
+                                                    newPlans[idx] = { ...newPlans[idx], buttonText: v };
                                                     setPricing({ ...pricing, plans: newPlans });
                                                 }} />
                                                 <InputGroup label="Link Href" value={plan.href} onChange={(v: string) => {
                                                     const newPlans = [...(pricing.plans || [])];
-                                                    newPlans[idx].href = v;
+                                                    newPlans[idx] = { ...newPlans[idx], href: v };
                                                     setPricing({ ...pricing, plans: newPlans });
                                                 }} />
                                             </div>
@@ -306,7 +306,7 @@ export default function ContentEditor() {
                                                     checked={plan.popular}
                                                     onChange={(e) => {
                                                         const newPlans = [...(pricing.plans || [])];
-                                                        newPlans[idx].popular = e.target.checked;
+                                                        newPlans[idx] = { ...newPlans[idx], popular: e.target.checked };
                                                         setPricing({ ...pricing, plans: newPlans });
                                                     }}
                                                     className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-yellow-400 focus:ring-yellow-400"
@@ -320,7 +320,10 @@ export default function ContentEditor() {
                                                     value={plan.features.join("\n")}
                                                     onChange={(e) => {
                                                         const newPlans = [...(pricing.plans || [])];
-                                                        newPlans[idx].features = e.target.value.split("\n").filter(f => f.trim() !== "");
+                                                        newPlans[idx] = {
+                                                            ...newPlans[idx],
+                                                            features: e.target.value.split(/\r?\n/).filter(f => f.trim() !== "")
+                                                        };
                                                         setPricing({ ...pricing, plans: newPlans });
                                                     }}
                                                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-400 min-h-[100px]"
