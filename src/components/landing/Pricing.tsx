@@ -77,7 +77,7 @@ export default function Pricing({ content }: { content?: PricingContent | null }
                     <p className="text-slate-400 max-w-xl mx-auto">{subtitle}</p>
                 </div>
 
-                <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 w-full">
                     {items.map((plan, i) => {
                         const isPopular = plan.popular;
                         const cardClasses = isPopular
