@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { getSiteContentAction, updateSiteContentAction, ContentSectionKey } from "@/app/actions/content-actions";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Save, LayoutTemplate, MessageSquare, Tag, Users, Check } from "lucide-react";
+import { Loader2, Save, LayoutTemplate, MessageSquare, Tag, Users, Check, Plus, Trash2 } from "lucide-react";
 
 // Types corresponding to our components
 import { HeroContent } from "@/components/landing/Hero";
@@ -197,16 +197,144 @@ export default function ContentEditor() {
                         </div>
                     )}
 
-                    {/* Simplified editors for other sections for now - can expand later */}
+                    {/* Pricing section with Plan Editor */}
                     {activeTab === 'pricing' && (
                         <div className="space-y-6">
                             <SectionCard title="Section Headlines">
                                 <InputGroup label="Title" value={pricing.title} onChange={(v: string) => setPricing({ ...pricing, title: v })} />
                                 <InputGroup label="Subtitle" value={pricing.subtitle} onChange={(v: string) => setPricing({ ...pricing, subtitle: v })} />
                             </SectionCard>
+
+                            <div className="mb-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-lg font-bold text-white">Pricing Plans</h3>
+                                    <button
+                                        onClick={() => {
+                                            const newPlans = [...(pricing.plans || [])];
+                                            newPlans.push({
+                                                name: "New Plan",
+                                                description: "Plan description",
+                                                price: "$0",
+                                                period: "/month",
+                                                features: ["Feature 1"],
+                                                buttonText: "Get Started",
+                                                href: "/signup",
+                                                buttonStyle: "primary"
+                                            });
+                                            setPricing({ ...pricing, plans: newPlans });
+                                        }}
+                                        className="flex items-center gap-1 text-xs font-bold text-yellow-400 hover:text-yellow-300 transition"
+                                    >
+                                        <Plus className="w-3 h-3" /> Add Plan
+                                    </button>
+                                </div>
+
+                                <div className="space-y-4">
+                                    {(pricing.plans || []).map((plan, idx) => (
+                                        <div key={idx} className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 relative">
+                                            <button
+                                                onClick={() => {
+                                                    const newPlans = [...(pricing.plans || [])];
+                                                    newPlans.splice(idx, 1);
+                                                    setPricing({ ...pricing, plans: newPlans });
+                                                }}
+                                                className="absolute top-4 right-4 text-slate-500 hover:text-red-400 transition"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <InputGroup label="Plan Name" value={plan.name} onChange={(v: string) => {
+                                                    const newPlans = [...(pricing.plans || [])];
+                                                    newPlans[idx].name = v;
+                                                    setPricing({ ...pricing, plans: newPlans });
+                                                }} />
+                                                <InputGroup label="Price" value={plan.price} onChange={(v: string) => {
+                                                    const newPlans = [...(pricing.plans || [])];
+                                                    newPlans[idx].price = v;
+                                                    setPricing({ ...pricing, plans: newPlans });
+                                                }} />
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <InputGroup label="Period" value={plan.period} onChange={(v: string) => {
+                                                    const newPlans = [...(pricing.plans || [])];
+                                                    newPlans[idx].period = v;
+                                                    setPricing({ ...pricing, plans: newPlans });
+                                                }} />
+                                                <div className="mb-4">
+                                                    <label className="block text-sm font-medium text-slate-400 mb-1">Button Style</label>
+                                                    <select
+                                                        value={plan.buttonStyle}
+                                                        onChange={(e) => {
+                                                            const newPlans = [...(pricing.plans || [])];
+                                                            newPlans[idx].buttonStyle = e.target.value as any;
+                                                            setPricing({ ...pricing, plans: newPlans });
+                                                        }}
+                                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-400"
+                                                    >
+                                                        <option value="primary">Primary (Yellow)</option>
+                                                        <option value="secondary">Secondary (Slate)</option>
+                                                        <option value="accent">Accent (Emerald)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <InputGroup label="Description" value={plan.description} onChange={(v: string) => {
+                                                const newPlans = [...(pricing.plans || [])];
+                                                newPlans[idx].description = v;
+                                                setPricing({ ...pricing, plans: newPlans });
+                                            }} />
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <InputGroup label="Button Text" value={plan.buttonText} onChange={(v: string) => {
+                                                    const newPlans = [...(pricing.plans || [])];
+                                                    newPlans[idx].buttonText = v;
+                                                    setPricing({ ...pricing, plans: newPlans });
+                                                }} />
+                                                <InputGroup label="Link Href" value={plan.href} onChange={(v: string) => {
+                                                    const newPlans = [...(pricing.plans || [])];
+                                                    newPlans[idx].href = v;
+                                                    setPricing({ ...pricing, plans: newPlans });
+                                                }} />
+                                            </div>
+
+                                            <div className="flex items-center gap-2 mb-4">
+                                                <input
+                                                    type="checkbox"
+                                                    id={`popular-${idx}`}
+                                                    checked={plan.popular}
+                                                    onChange={(e) => {
+                                                        const newPlans = [...(pricing.plans || [])];
+                                                        newPlans[idx].popular = e.target.checked;
+                                                        setPricing({ ...pricing, plans: newPlans });
+                                                    }}
+                                                    className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-yellow-400 focus:ring-yellow-400"
+                                                />
+                                                <label htmlFor={`popular-${idx}`} className="text-sm text-slate-300 cursor-pointer">Mark as Most Popular</label>
+                                            </div>
+
+                                            <div className="mb-4">
+                                                <label className="block text-sm font-medium text-slate-400 mb-1">Features (One per line)</label>
+                                                <textarea
+                                                    value={plan.features.join("\n")}
+                                                    onChange={(e) => {
+                                                        const newPlans = [...(pricing.plans || [])];
+                                                        newPlans[idx].features = e.target.value.split("\n").filter(f => f.trim() !== "");
+                                                        setPricing({ ...pricing, plans: newPlans });
+                                                    }}
+                                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-yellow-400 min-h-[100px]"
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
                             <SectionCard title="Footer Link">
                                 <InputGroup label="Footer Text" value={pricing.footerText} onChange={(v: string) => setPricing({ ...pricing, footerText: v })} />
-                                <InputGroup label="link Text" value={pricing.footerLinkText} onChange={(v: string) => setPricing({ ...pricing, footerLinkText: v })} />
+                                <InputGroup label="Link Text" value={pricing.footerLinkText} onChange={(v: string) => setPricing({ ...pricing, footerLinkText: v })} />
+                                <InputGroup label="Link Href" value={pricing.footerLinkHref} onChange={(v: string) => setPricing({ ...pricing, footerLinkHref: v })} />
                             </SectionCard>
                         </div>
                     )}
