@@ -8,6 +8,8 @@ import CTA from "@/components/landing/CTA";
 import Footer from "@/components/landing/Footer";
 import { getSiteContentAction } from "@/app/actions/content-actions";
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   // Fetch content for all sections in parallel
   const [

@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect } from "react";
 import { getSiteContentAction, updateSiteContentAction, ContentSectionKey } from "@/app/actions/content-actions";
 import { useToast } from "@/components/ui/use-toast";
