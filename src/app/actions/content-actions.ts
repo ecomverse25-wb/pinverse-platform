@@ -28,7 +28,6 @@ export async function getSiteContentAction(sectionKey: ContentSectionKey) {
         if (error) {
             // If row doesn't exist (e.g. first run), return null so components use defaults
             if (error.code === 'PGRST116') return { content: null, error: null };
-            console.error(`Error fetching content for ${sectionKey}:`, error);
             return { content: null, error: error.message };
         }
 

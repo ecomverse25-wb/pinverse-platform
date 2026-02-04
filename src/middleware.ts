@@ -113,11 +113,8 @@ export async function middleware(request: NextRequest) {
         const userEmail = user?.email?.toLowerCase() || "";
 
         if (!user || !adminEmails.includes(userEmail)) {
-            console.log(`[Middleware] Admin Access DENIED. User: '${userEmail}'. Allowed: ${JSON.stringify(adminEmails)}`);
             return NextResponse.redirect(new URL("/dashboard", request.url));
         }
-
-        console.log(`[Middleware] Admin Access GRANTED. User: '${userEmail}'`);
     }
 
     return response;
