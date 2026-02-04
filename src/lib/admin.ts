@@ -3,7 +3,7 @@
 // List of admin email addresses - add your email here
 export const ADMIN_EMAILS = process.env.ADMIN_EMAILS
     ? process.env.ADMIN_EMAILS.split(',').map(email => email.trim().toLowerCase())
-    : ['admin@pinverse.com', 'ecomverse25@gmail.com'];
+    : ['admin@pinverse.com', 'admin@pinverse.io', 'ecomverse25@gmail.com'];
 
 // Check if a user email is an admin
 export function isAdmin(email: string | undefined): boolean {
