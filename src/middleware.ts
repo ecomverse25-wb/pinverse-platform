@@ -100,9 +100,14 @@ export async function middleware(request: NextRequest) {
 
     // Admin-specific protection
     if (request.nextUrl.pathname.startsWith("/admin")) {
-        const adminEmails = process.env.ADMIN_EMAILS
+        const envAdminEmails = process.env.ADMIN_EMAILS
             ?.split(",")
             .map((email) => email.trim().toLowerCase()) || [];
+
+        // Fallback list (matches lib/admin.ts) to ensure access even if Env Var fails
+        const fallbackAdmins = ['admin@pinverse.com', 'admin@pinverse.io', 'ecomverse25@gmail.com'];
+
+        const adminEmails = [...new Set([...envAdminEmails, ...fallbackAdmins])];
 
         // Use optional chaining safely or default to empty string
         const userEmail = user?.email?.toLowerCase() || "";
