@@ -33,6 +33,28 @@ export async function getTools() {
     return tools as Tool[];
 }
 
+// Public function for home page - no auth required
+export async function getPublicVisibleTools() {
+    const adminSupabase = createAdminClient();
+    if (!adminSupabase) {
+        console.error('Admin client unavailable for public tools fetch');
+        return [];
+    }
+
+    const { data: tools, error } = await adminSupabase
+        .from('tools')
+        .select('*')
+        .eq('is_globally_visible', true)
+        .order('name');
+
+    if (error) {
+        console.error('Error fetching public visible tools:', error);
+        return [];
+    }
+
+    return tools as Tool[];
+}
+
 export async function getToolVisibilityForUser(userId: string) {
     const supabase = await createClient();
     const { data, error } = await supabase
@@ -66,6 +88,7 @@ export async function toggleToolGlobal(toolId: string, isVisible: boolean) {
 
     if (error) throw error;
 
+    revalidatePath('/');  // Revalidate home page
     revalidatePath('/dashboard/tools');
     revalidatePath('/admin');
 }
