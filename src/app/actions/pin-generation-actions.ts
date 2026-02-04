@@ -126,6 +126,20 @@ export async function generatePinImageAction(
         const base64Image = `data:image/jpeg;base64,${compositeImage.toString("base64")}`;
         const imageName = `pin-${articleTopic.replace(/\s+/g, "-").toLowerCase()}.jpg`;
 
+        // Track usage (fire and forget)
+        (async () => {
+            try {
+                const supabase = await createClient();
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    const { trackUserAction } = await import("./tracking-actions");
+                    await trackUserAction(user.id, 'pin_created', `Created pin for: ${articleTitle}`, { topic: articleTopic });
+                }
+            } catch (err) {
+                console.error("Tracking failed inside pin action:", err);
+            }
+        })();
+
         return {
             success: true,
             imageBase64: base64Image,

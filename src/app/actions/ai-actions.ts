@@ -24,6 +24,22 @@ export async function generateArticleAction(prompt: string, apiKey: string, mode
         });
 
         if (response.text) {
+            // Track usage (fire and forget)
+            (async () => {
+                try {
+                    // Dynamic import to avoid circular dep issues if any, or just keeping cleanly separated
+                    const { createClient } = await import("@/lib/supabase-server");
+                    const supabase = await createClient();
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (user) {
+                        const { trackUserAction } = await import("./tracking-actions");
+                        await trackUserAction(user.id, 'api_call', `Generated article with AI`, { model: normalizedModel });
+                    }
+                } catch (err) {
+                    console.error("Tracking failed inside AI action:", err);
+                }
+            })();
+
             return { success: true, content: response.text };
         }
         return { error: "No content generated." };
