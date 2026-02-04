@@ -100,8 +100,15 @@ export async function middleware(request: NextRequest) {
 
     // Admin-specific protection
     if (request.nextUrl.pathname.startsWith("/admin")) {
-        const adminEmails = process.env.ADMIN_EMAILS?.split(",") || [];
-        if (!user || !adminEmails.includes(user.email || "")) {
+        const adminEmails = process.env.ADMIN_EMAILS
+            ?.split(",")
+            .map((email) => email.trim().toLowerCase()) || [];
+
+        // Use optional chaining safely or default to empty string
+        const userEmail = user?.email?.toLowerCase() || "";
+
+        if (!user || !adminEmails.includes(userEmail)) {
+            console.log("Admin Access Denied for:", userEmail);
             return NextResponse.redirect(new URL("/dashboard", request.url));
         }
     }
