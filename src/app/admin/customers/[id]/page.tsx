@@ -77,7 +77,7 @@ export default function CustomerDetailPage() {
         setActionLoading(false);
     };
 
-    const handlePlanChange = async (newPlan: 'free' | 'pro' | 'enterprise') => {
+    const handlePlanChange = async (newPlan: 'free' | 'starter' | 'pro' | 'promax' | 'enterprise') => {
         if (!customer || !adminUser) return;
         setActionLoading(true);
         const result = await updateUserPlanAction(customer.id, newPlan);
@@ -133,7 +133,9 @@ export default function CustomerDetailPage() {
     const getPlanStyle = (plan: UserProfile["plan"]) => {
         const styles = {
             free: { bg: "rgba(100, 116, 139, 0.2)", color: "#94A3B8", label: "Free Plan" },
+            starter: { bg: "rgba(16, 185, 129, 0.2)", color: "#10B981", label: "Starter" },
             pro: { bg: "rgba(250, 204, 21, 0.2)", color: "#FACC15", label: "Pro Plan" },
+            promax: { bg: "rgba(249, 115, 22, 0.2)", color: "#F97316", label: "Pro Max" },
             enterprise: { bg: "rgba(139, 92, 246, 0.2)", color: "#A78BFA", label: "Enterprise Plan" },
         };
         return styles[plan];
@@ -325,7 +327,7 @@ export default function CustomerDetailPage() {
                             </button>
                         </div>
                         <div className="space-y-3">
-                            {(['free', 'pro', 'enterprise'] as const).map((plan) => (
+                            {(['free', 'starter', 'pro', 'promax', 'enterprise'] as const).map((plan) => (
                                 <button
                                     key={plan}
                                     onClick={() => handlePlanChange(plan)}
