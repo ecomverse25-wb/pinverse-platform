@@ -50,8 +50,11 @@ export async function resetPassword(email: string) {
     const supabase = createClient()
     if (!supabase) return { data: null, error: { message: "System Error: Database configuration missing." } as any }
 
+    // Use environment variable for site URL, fallback to production URL
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://pinverse.io';
+
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: `${siteUrl}/reset-password`,
     })
     return { data, error }
 }
