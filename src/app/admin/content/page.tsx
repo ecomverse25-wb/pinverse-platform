@@ -317,6 +317,55 @@ export default function ContentEditor() {
                                 <InputGroup label="Description" value={footer.description} onChange={(v: string) => setFooter({ ...footer, description: v })} />
                                 <InputGroup label="Copyright Text" value={footer.copyright} onChange={(v: string) => setFooter({ ...footer, copyright: v })} />
                             </SectionCard>
+
+                            {/* Company Links Editor */}
+                            <div className="mb-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-lg font-bold text-white">Company Links</h3>
+                                    <button
+                                        onClick={() => {
+                                            const newLinks = [...(footer.companyLinks || [])];
+                                            newLinks.push({ label: "New Link", href: "/" });
+                                            setFooter({ ...footer, companyLinks: newLinks });
+                                        }}
+                                        className="flex items-center gap-1 text-xs font-bold text-yellow-400 hover:text-yellow-300 transition"
+                                    >
+                                        <Plus className="w-3 h-3" /> Add Link
+                                    </button>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {(footer.companyLinks || []).map((link, idx) => (
+                                        <div key={idx} className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 relative">
+                                            <button
+                                                onClick={() => {
+                                                    const newLinks = [...(footer.companyLinks || [])];
+                                                    newLinks.splice(idx, 1);
+                                                    setFooter({ ...footer, companyLinks: newLinks });
+                                                }}
+                                                className="absolute top-3 right-3 text-slate-500 hover:text-red-400 transition"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                            <div className="grid grid-cols-2 gap-4 pr-8">
+                                                <InputGroup label="Label" value={link.label} onChange={(v: string) => {
+                                                    const newLinks = [...(footer.companyLinks || [])];
+                                                    newLinks[idx] = { ...newLinks[idx], label: v };
+                                                    setFooter({ ...footer, companyLinks: newLinks });
+                                                }} />
+                                                <InputGroup label="URL" value={link.href} onChange={(v: string) => {
+                                                    const newLinks = [...(footer.companyLinks || [])];
+                                                    newLinks[idx] = { ...newLinks[idx], href: v };
+                                                    setFooter({ ...footer, companyLinks: newLinks });
+                                                }} />
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {(!footer.companyLinks || footer.companyLinks.length === 0) && (
+                                        <p className="text-slate-500 text-sm italic">No company links. Click "Add Link" to create one.</p>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     )}
                 </div>

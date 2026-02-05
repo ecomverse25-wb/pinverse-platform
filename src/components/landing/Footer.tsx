@@ -26,7 +26,6 @@ const defaultContent: FooterContent = {
         { label: "Pricing", href: "#pricing" }
     ],
     companyLinks: [
-        { label: "Ecomverse Academy", href: "https://ecomverse.study" },
         { label: "Contact", href: "/contact" }
     ],
     legalLinks: [
