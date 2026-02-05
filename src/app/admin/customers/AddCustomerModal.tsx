@@ -18,7 +18,7 @@ export default function AddCustomerModal({ isOpen, onClose, onSuccess }: AddCust
         email: "",
         password: "",
         fullName: "",
-        plan: "free" as "free" | "pro" | "enterprise"
+        plan: "free" as "free" | "starter" | "pro" | "promax" | "enterprise"
     });
 
     if (!isOpen) return null;
@@ -124,7 +124,7 @@ export default function AddCustomerModal({ isOpen, onClose, onSuccess }: AddCust
                             Subscription Plan <span className="text-red-400">*</span>
                         </label>
                         <div className="grid grid-cols-3 gap-2">
-                            {['free', 'pro', 'enterprise'].map((plan) => (
+                            {['free', 'starter', 'pro', 'promax', 'enterprise'].map((plan) => (
                                 <button
                                     key={plan}
                                     type="button"
@@ -137,7 +137,7 @@ export default function AddCustomerModal({ isOpen, onClose, onSuccess }: AddCust
                                         }
                                     `}
                                 >
-                                    {plan}
+                                    {plan === 'promax' ? 'Pro Max' : plan}
                                     {formData.plan === plan && (
                                         <div className="absolute top-1 right-1 w-2 h-2 bg-yellow-400 rounded-full" />
                                     )}

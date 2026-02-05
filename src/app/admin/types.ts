@@ -2,7 +2,7 @@ export interface UserProfile {
     id: string;
     email: string;
     full_name: string | null;
-    plan: 'free' | 'pro' | 'enterprise';
+    plan: 'free' | 'starter' | 'pro' | 'promax' | 'enterprise';
     status: 'active' | 'suspended' | 'cancelled';
     pins_created: number;
     api_calls: number;
@@ -19,7 +19,9 @@ export interface AdminMetrics {
     monthlyRevenue: number;
     usersByPlan: {
         free: number;
+        starter: number;
         pro: number;
+        promax: number;
         enterprise: number;
     };
 }

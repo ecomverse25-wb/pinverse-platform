@@ -113,7 +113,9 @@ export default function CustomersPage() {
     const getPlanBadge = (plan: UserProfile["plan"]) => {
         const styles = {
             free: { bg: "rgba(100, 116, 139, 0.2)", color: "#94A3B8", icon: null },
+            starter: { bg: "rgba(16, 185, 129, 0.2)", color: "#10B981", icon: null }, // Emerald for Starter
             pro: { bg: "rgba(250, 204, 21, 0.2)", color: "#FACC15", icon: Crown },
+            promax: { bg: "rgba(249, 115, 22, 0.2)", color: "#F97316", icon: Crown }, // Orange for Pro Max
             enterprise: { bg: "rgba(139, 92, 246, 0.2)", color: "#A78BFA", icon: Crown },
         };
         const style = styles[plan];
@@ -203,7 +205,9 @@ export default function CustomersPage() {
                     >
                         <option value="all">All Plans</option>
                         <option value="free">Free</option>
+                        <option value="starter">Starter</option>
                         <option value="pro">Pro</option>
+                        <option value="promax">Pro Max</option>
                         <option value="enterprise">Enterprise</option>
                     </select>
                 </div>

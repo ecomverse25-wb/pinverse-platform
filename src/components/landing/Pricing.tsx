@@ -25,10 +25,10 @@ export interface PricingContent {
 const defaultPlans: PricingPlan[] = [
     {
         name: "Free Trial",
-        description: "Try all features for 7 days",
+        description: "Try all features for 3 days",
         price: "$0",
-        period: "/7 days",
-        features: ["All tools access", "10 pins limit", "Basic support"],
+        period: "/month",
+        features: ["All tools access", "Unlimited pins", "Basic support"],
         buttonText: "Start Free Trial",
         href: "/signup",
         buttonStyle: "secondary"
@@ -36,23 +36,34 @@ const defaultPlans: PricingPlan[] = [
     {
         name: "Starter",
         description: "For individual creators",
-        price: "$29",
+        price: "$14",
         period: "/month",
-        features: ["2 tools access", "100 pins/month", "Priority support", "CSV export"],
+        features: ["2 Tools access", "Unlimited pins", "Priority support", "CSV export"],
         buttonText: "Get Started",
         href: "/signup?plan=starter",
-        popular: true,
         buttonStyle: "primary"
     },
     {
         name: "Pro",
         description: "For power users & agencies",
-        price: "$59",
+        price: "$27",
         period: "/month",
         features: ["All tools access", "Unlimited pins", "Priority support", "Early access to new tools"],
         buttonText: "Go Pro",
         href: "/signup?plan=pro",
+        popular: false,
         buttonStyle: "accent"
+    },
+    {
+        name: "Pro Max",
+        description: "For agencies",
+        price: "$149",
+        period: "/year",
+        features: ["50% saving", "All tools access", "Unlimited pins", "Priority support", "Early access to new tools"],
+        buttonText: "Go Pro Max",
+        href: "/signup?plan=promax",
+        popular: true,
+        buttonStyle: "primary"
     }
 ];
 

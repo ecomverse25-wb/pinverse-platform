@@ -55,11 +55,15 @@ export async function fetchAdminMetricsAction(): Promise<{ metrics: AdminMetrics
             totalApiCalls: users.reduce((sum, u) => sum + (u.api_calls || 0), 0),
             usersByPlan: {
                 free: users.filter(u => u.plan === 'free').length,
+                starter: users.filter(u => u.plan === 'starter').length,
                 pro: users.filter(u => u.plan === 'pro').length,
+                promax: users.filter(u => u.plan === 'promax').length,
                 enterprise: users.filter(u => u.plan === 'enterprise').length,
             },
             monthlyRevenue:
-                users.filter(u => u.plan === 'pro').length * 29 +
+                users.filter(u => u.plan === 'starter').length * 14 +
+                users.filter(u => u.plan === 'pro').length * 27 +
+                Math.round(users.filter(u => u.plan === 'promax').length * (149 / 12)) +
                 users.filter(u => u.plan === 'enterprise').length * 99,
         };
 
@@ -82,7 +86,7 @@ export async function fetchAdminMetricsAction(): Promise<{ metrics: AdminMetrics
     } catch (error: any) {
         console.error("Admin Metrics Error:", error);
         return {
-            metrics: { totalUsers: 0, activeToday: 0, newThisWeek: 0, totalPinsCreated: 0, totalApiCalls: 0, monthlyRevenue: 0, usersByPlan: { free: 0, pro: 0, enterprise: 0 } },
+            metrics: { totalUsers: 0, activeToday: 0, newThisWeek: 0, totalPinsCreated: 0, totalApiCalls: 0, monthlyRevenue: 0, usersByPlan: { free: 0, starter: 0, pro: 0, promax: 0, enterprise: 0 } },
             changes: { totalUsersChange: 0, newThisWeekChange: 0 },
             error: error.message
         };
@@ -124,7 +128,7 @@ export async function fetchAllUsersAction() {
             id: profile.id,
             email: profile.email || '',
             full_name: profile.full_name,
-            plan: (profile.plan as 'free' | 'pro' | 'enterprise') || 'free',
+            plan: (profile.plan as 'free' | 'starter' | 'pro' | 'promax' | 'enterprise') || 'free',
             status: (profile.status as 'active' | 'suspended' | 'cancelled') || 'active',
             pins_created: profile.pins_created || 0,
             api_calls: profile.api_calls || 0,
@@ -177,7 +181,7 @@ export async function updateUserStatusAction(userId: string, status: 'active' | 
     }
 }
 
-export async function updateUserPlanAction(userId: string, plan: 'free' | 'pro' | 'enterprise') {
+export async function updateUserPlanAction(userId: string, plan: 'free' | 'starter' | 'pro' | 'promax' | 'enterprise') {
     try {
         const adminUser = await checkAdmin();
         const supabase = createSupabaseAdmin();
@@ -284,7 +288,7 @@ export async function createCustomerAction(data: {
     email: string;
     password: string;
     fullName?: string;
-    plan: 'free' | 'pro' | 'enterprise';
+    plan: 'free' | 'starter' | 'pro' | 'promax' | 'enterprise';
 }) {
     try {
         const adminUser = await checkAdmin();
