@@ -16,10 +16,12 @@ import {
     XCircle,
     AlertCircle,
     Download,
-    Loader2
+    Loader2,
+    Plus
 } from "lucide-react";
 import { fetchAllUsersAction, updateUserStatusAction } from "@/app/actions/admin-actions";
 import { UserProfile } from "@/app/admin/types";
+import AddCustomerModal from "./AddCustomerModal";
 
 export default function CustomersPage() {
     const [users, setUsers] = useState<UserProfile[]>([]);
@@ -30,6 +32,7 @@ export default function CustomersPage() {
     const [filterStatus, setFilterStatus] = useState<string>("all");
     const [currentPage, setCurrentPage] = useState(1);
     const [openMenu, setOpenMenu] = useState<string | null>(null);
+    const [showAddCustomer, setShowAddCustomer] = useState(false);
     const itemsPerPage = 10;
 
     // Fetch users on mount
@@ -218,14 +221,24 @@ export default function CustomersPage() {
                 </select>
 
                 {/* Export Button */}
-                <button
-                    onClick={exportToCSV}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition hover:opacity-90"
-                    style={{ background: '#10B981', color: 'white' }}
-                >
-                    <Download className="w-4 h-4" />
-                    Export CSV
-                </button>
+                <div className="flex gap-3">
+                    <button
+                        onClick={() => setShowAddCustomer(true)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition hover:opacity-90"
+                        style={{ background: '#FACC15', color: '#0F172A' }}
+                    >
+                        <Plus className="w-4 h-4" />
+                        Add Customer
+                    </button>
+                    <button
+                        onClick={exportToCSV}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition hover:opacity-90"
+                        style={{ background: '#10B981', color: 'white' }}
+                    >
+                        <Download className="w-4 h-4" />
+                        Export CSV
+                    </button>
+                </div>
             </div>
 
             {/* Customer Table */}
@@ -355,6 +368,11 @@ export default function CustomersPage() {
                     </div>
                 </div>
             </div>
+            <AddCustomerModal
+                isOpen={showAddCustomer}
+                onClose={() => setShowAddCustomer(false)}
+                onSuccess={() => loadUsers()}
+            />
         </div>
     );
 }

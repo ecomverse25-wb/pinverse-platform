@@ -279,3 +279,62 @@ export async function fetchUserActivitiesAction(userId: string) {
         return { activities: [], error: error.message };
     }
 }
+
+export async function createCustomerAction(data: {
+    email: string;
+    password: string;
+    fullName?: string;
+    plan: 'free' | 'pro' | 'enterprise';
+}) {
+    try {
+        const adminUser = await checkAdmin();
+        const supabase = createSupabaseAdmin();
+        if (!supabase) throw new Error("Supabase Admin client initialization failed");
+
+        // 1. Create User
+        const { data: userData, error: createError } = await supabase.auth.admin.createUser({
+            email: data.email,
+            password: data.password,
+            email_confirm: true,
+            user_metadata: {
+                full_name: data.fullName
+            }
+        });
+
+        if (createError) throw createError;
+        if (!userData.user) throw new Error("Failed to create user object");
+
+        // 2. Update Profile with Plan (Profile is auto-created by trigger usually, but we update explicit fields)
+        // Wait a small moment or direct insert/upsert to ensure profile exists/is updated
+
+        // We'll use upsert to be safe, ensuring we set the plan correctly
+        const { error: profileError } = await supabase
+            .from('profiles')
+            .upsert({
+                id: userData.user.id,
+                email: data.email,
+                full_name: data.fullName,
+                plan: data.plan,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'id' });
+
+        if (profileError) {
+            // If profile update fails, we might want to warn but the user exists
+            console.error("Profile update failed after user creation", profileError);
+            // Don't throw here to avoid "User created but error shown" confusion, or handle gracefully
+        }
+
+        // 3. Log Activity
+        await logActivityAction(
+            userData.user.id,
+            data.email,
+            'signup',
+            `User created manually by admin ${adminUser.email} with plan ${data.plan}`
+        );
+
+        return { success: true, userId: userData.user.id };
+
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
