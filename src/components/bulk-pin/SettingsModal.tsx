@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { PinConfig, PinStyle, AspectRatio, ImageModel, PostInterval, CSVSettings } from '@/lib/types';
-import { Settings, Key, Sliders, FileEdit, ImageIcon, FileSpreadsheet, X, Check, Loader2 } from 'lucide-react';
+import { Settings, Key, Sliders, FileEdit, ImageIcon, FileSpreadsheet, X, Check, Loader2, RotateCcw } from 'lucide-react';
+import { DEFAULT_TEXT_RULES } from '@/lib/bulk-pin-constants';
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -210,6 +211,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, customRu
                                 onChange={(e) => setLocalTextRules(e.target.value)}
                                 className="w-full h-32 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded p-3 text-xs font-mono text-gray-700 dark:text-slate-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none resize-y"
                             />
+                            <button
+                                onClick={() => setLocalTextRules(DEFAULT_TEXT_RULES)}
+                                className="mt-2 px-3 py-1.5 text-xs font-medium text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800/50 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 flex items-center gap-1.5 transition"
+                            >
+                                <RotateCcw className="w-3 h-3" />
+                                Reset to Default
+                            </button>
                         </div>
                     </div>
 

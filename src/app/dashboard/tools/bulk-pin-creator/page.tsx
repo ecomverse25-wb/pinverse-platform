@@ -12,16 +12,13 @@ import CSVEditor from '@/components/bulk-pin/CSVEditor';
 import ChatBot from '@/components/bulk-pin/ChatBot';
 import { getUserSettingsAction, updateUserSettingsAction } from "@/app/actions/user-settings-actions";
 import SettingsModal from '@/components/bulk-pin/SettingsModal';
+import { GEMINI_CONTENT_MODELS, GEMINI_IMAGE_MODELS } from '@/lib/gemini-enhanced';
+import { REPLICATE_CONTENT_MODELS, REPLICATE_IMAGE_MODELS } from '@/lib/replicate-enhanced';
+import { PIN_TEMPLATES, SYSTEM_PIN_TEMPLATES, getTemplateById } from '@/lib/pin-templates-library';
+import type { PinTemplate } from '@/lib/pin-templates-library';
+import { generateSinglePin } from '@/app/actions/bulk-pin-enhanced/generation';
+import { DEFAULT_TEXT_RULES, DEFAULT_IMAGE_RULES } from '@/lib/bulk-pin-constants';
 
-const DEFAULT_TEXT_RULES = `You're a Pinterest content writer optimizing for maximum search visibility and clicks.
-Write: 1. A Pinterest title (under 80 characters) starting with an emoji and including the main keyword
-2. A Pinterest description (EXACTLY 3 sentences) that clearly summarizes the post
-CRITICAL: Target Keyword must appear in the first sentence. Include 3-4 searchable SEO keywords naturally.`;
-
-const DEFAULT_IMAGE_RULES = `Create a visual prompt for a high-converting, vibrant Pinterest pin.
-1. IMAGE: High-quality, eye-catching, and contextually relevant
-2. TYPOGRAPHY: Include the title "{title}" in a bold, readable font
-3. STYLE: Creative, "Poster Style", colorful but professional.`;
 
 const DEFAULT_CONFIG: PinConfig = {
     style: 'basic_bottom', ratio: '9:16', model: 'gemini-2.5-flash-image', contentType: 'article',
@@ -42,6 +39,18 @@ export default function BulkPinCreatorPage() {
     const [showSettings, setShowSettings] = useState(false);
     const [csvSettings, setCsvSettings] = useState<CSVSettings>({ imgbbApiKey: '', postInterval: '60', pinsPerDay: 10 });
     const [currentUser, setCurrentUser] = useState<{ id: string; email: string } | null>(null);
+    const [enhancedMode, setEnhancedMode] = useState(false);
+    const [selectedTemplate, setSelectedTemplate] = useState('basic-text-middle');
+    const [selectedContentModel, setSelectedContentModel] = useState('gemini-2.5-flash');
+    const [contentProvider, setContentProvider] = useState<'gemini' | 'replicate'>('gemini');
+    const [imageProvider, setImageProvider] = useState<'gemini' | 'replicate'>('gemini');
+    const [customTemplates, setCustomTemplates] = useState<PinTemplate[]>([]);
+
+    // Load custom templates from localStorage
+    useEffect(() => {
+        const saved = localStorage.getItem('pinverse_custom_templates');
+        if (saved) try { setCustomTemplates(JSON.parse(saved)); } catch { }
+    }, []);
 
 
     useEffect(() => {
@@ -153,6 +162,58 @@ export default function BulkPinCreatorPage() {
             }
         } catch (e: unknown) {
             const errorMessage = e instanceof Error ? e.message : 'Image generation failed';
+            setPins(current => current.map(p => p.id === id ? { ...p, status: 'error', error: errorMessage } : p));
+        }
+    };
+
+    const handleEnhancedGenerate = async (id: string) => {
+        const pin = pins.find(p => p.id === id);
+        if (!pin) return;
+
+        // Require a template when enhanced mode is active
+        const template = getTemplateById(selectedTemplate);
+        if (!template) {
+            alert('Please select a Pin Style Template to use Enhanced Mode.');
+            return;
+        }
+
+        // Check if Gemini model selected but no key
+        if (selectedContentModel.startsWith('gemini-') && !googleApiKey) {
+            alert('Gemini API key not configured. Please add it in Settings.');
+            return;
+        }
+
+        // Determine provider from model
+        const isGeminiModel = selectedContentModel.startsWith('gemini-');
+        const effectiveContentProvider = isGeminiModel ? 'gemini' as const : 'replicate' as const;
+
+        setPins(current => current.map(p => p.id === id ? { ...p, status: 'generating_image', error: undefined } : p));
+        try {
+            const result = await generateSinglePin({
+                url: pin.url,
+                keywords: pin.targetKeyword,
+                templateSlug: selectedTemplate,
+                contentProvider: effectiveContentProvider,
+                contentModel: selectedContentModel,
+                imageProvider: imageProvider,
+                imageModel: imageProvider === 'gemini' ? 'gemini-3-pro-image-preview' : 'flux-dev',
+                stylePrompt: template.guidelines.replace('${url}', pin.url),
+            });
+
+            if (result.success && result.pin) {
+                const enhancedPin: PinData = {
+                    ...pin,
+                    title: result.pin.title,
+                    description: result.pin.description,
+                    imageUrl: result.pin.imageUrl,
+                    status: 'complete',
+                };
+                setPins(current => current.map(p => p.id === id ? enhancedPin : p));
+            } else {
+                setPins(current => current.map(p => p.id === id ? { ...p, status: 'error', error: result.error || 'Enhanced generation failed' } : p));
+            }
+        } catch (e: unknown) {
+            const errorMessage = e instanceof Error ? e.message : 'Enhanced generation failed';
             setPins(current => current.map(p => p.id === id ? { ...p, status: 'error', error: errorMessage } : p));
         }
     };
@@ -283,6 +344,86 @@ export default function BulkPinCreatorPage() {
                             style={{ background: 'var(--accent)', color: 'white' }}>
                             <FileText className="w-3.5 h-3.5" /> Export CSV for Pinterest
                         </button>
+                        {/* Enhanced Features Panel */}
+                        {enhancedMode && (
+                            <div className="p-4 rounded-lg border bg-emerald-50 text-slate-900 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600 border-emerald-200">
+                                <h3 className="font-semibold text-emerald-800 dark:text-white mb-3">
+                                    ✨ Enhanced Features Active
+                                </h3>
+
+                                {/* AI Model Selection */}
+                                <div className="mb-4">
+                                    <label className="text-sm font-medium mb-2 block dark:text-slate-300">AI Model for Content Generation</label>
+                                    <select
+                                        value={selectedContentModel}
+                                        onChange={(e) => setSelectedContentModel(e.target.value)}
+                                        className="w-full p-2 border rounded bg-white dark:bg-slate-700 dark:text-white dark:border-slate-500"
+                                    >
+                                        <optgroup label="── Replicate API ──">
+                                            <option value="auto">Auto (GPT-4o → DeepSeek fallback)</option>
+                                            <option value="deepseek-v3">DeepSeek V3-0324 (Top Open Model)</option>
+                                            <option value="llama-4-scout">Llama 4 Scout (Meta Newest)</option>
+                                            <option value="llama-3.1-405b">Llama 3.1 405B (Near GPT-4)</option>
+                                            <option value="llama-3.3-70b">Llama 3.3 70B (Best Value Open)</option>
+                                            <option value="mixtral-8x7b">Mixtral 8x7B (Fast + Smart)</option>
+                                            <option value="chatgpt-4o">GPT-4o (Best Closed Model)</option>
+                                            <option value="chatgpt-4o-mini">GPT-4o Mini (Fast + Affordable)</option>
+                                        </optgroup>
+                                        <optgroup label="── Gemini API ──">
+                                            <option value="gemini-3.1-pro">Gemini 3.1 Pro (Latest)</option>
+                                            <option value="gemini-3-flash">Gemini 3 Flash (Frontier Preview)</option>
+                                            <option value="gemini-2.5-pro">Gemini 2.5 Pro (Most Powerful)</option>
+                                            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Best Value) ⭐</option>
+                                            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Fastest)</option>
+                                        </optgroup>
+                                    </select>
+                                    <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                                        Gemini models require a Google Gemini API key. Other models use your existing API credentials.
+                                    </p>
+                                </div>
+
+                                {/* Image Provider */}
+                                <div className="mb-4">
+                                    <label className="text-sm font-medium mb-2 block dark:text-slate-300">Image Provider</label>
+                                    <select
+                                        value={imageProvider}
+                                        onChange={(e) => setImageProvider(e.target.value as 'gemini' | 'replicate')}
+                                        className="w-full p-2 border rounded bg-white dark:bg-slate-700 dark:text-white dark:border-slate-500"
+                                    >
+                                        <option value="gemini">Gemini (Imagen 4)</option>
+                                        <option value="replicate">Replicate (Flux, SeeDream)</option>
+                                    </select>
+                                </div>
+
+                                {/* Template Selection */}
+                                <div>
+                                    <label className="text-sm font-medium mb-2 block dark:text-slate-300">Pin Style Template</label>
+                                    <select
+                                        value={selectedTemplate}
+                                        onChange={(e) => setSelectedTemplate(e.target.value)}
+                                        className="w-full p-2 border rounded bg-white dark:bg-slate-700 dark:text-white dark:border-slate-500"
+                                    >
+                                        {SYSTEM_PIN_TEMPLATES.map(template => (
+                                            <option key={template.id} value={template.id}>
+                                                {template.name}
+                                            </option>
+                                        ))}
+                                        {customTemplates.length > 0 && (
+                                            <optgroup label="──── My Custom Styles ────">
+                                                {customTemplates.map(template => (
+                                                    <option key={template.id} value={template.id}>
+                                                        {template.name}
+                                                    </option>
+                                                ))}
+                                            </optgroup>
+                                        )}
+                                    </select>
+                                    <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                                        {SYSTEM_PIN_TEMPLATES.length} niche-specific templates available
+                                    </p>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Settings Button */}
                         <button onClick={() => setShowSettings(true)}
@@ -291,6 +432,23 @@ export default function BulkPinCreatorPage() {
                             <Settings className="w-3.5 h-3.5" /> Settings
                         </button>
                     </div>
+                </div>
+                {/* ADD this Enhanced Mode toggle */}
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setEnhancedMode(!enhancedMode)}
+                        className={`px-4 py-2 rounded-lg font-semibold transition-colors ${enhancedMode
+                            ? 'bg-green-500 text-white'
+                            : 'bg-gray-200 text-gray-700'
+                            }`}
+                    >
+                        {enhancedMode ? '🟩 Enhanced Mode' : '🟦 Classic Mode'}
+                    </button>
+
+                    {/* Your existing Settings button */}
+                    <button onClick={() => setShowSettings(!showSettings)}>
+                        <Settings />
+                    </button>
                 </div>
 
                 {/* Pin Grid */}

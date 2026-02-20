@@ -23,6 +23,9 @@ const nextConfig: NextConfig = {
     }
     return config;
   },
+
+  // Allow Turbopack (Next.js 16 default) to run without error
+  turbopack: {},
 };
 
 export default nextConfig;
