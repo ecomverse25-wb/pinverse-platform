@@ -46,6 +46,19 @@ export default async function ToolsPage() {
             href: "/dashboard/tools/pinterest-scheduler",
         },
         {
+            id: "sitemap-extractor",
+            name: "Sitemap Product Extractor",
+            description: "Upload a product sitemap XML to extract product names, links, and images. Export results as a clean CSV file.",
+            features: [
+                "XML sitemap parsing",
+                "Product data extraction",
+                "WooCommerce support",
+                "CSV export",
+            ],
+            status: "available" as const,
+            href: "/dashboard/tools/sitemap-extractor",
+        },
+        {
             id: "keyword-research",
             name: "Keyword Research",
             description: "Find high-traffic Pinterest keywords to optimize your pins for maximum discoverability.",
