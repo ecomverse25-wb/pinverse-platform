@@ -30,11 +30,13 @@ export interface ArticleData {
     wpLink?: string;
 }
 
-// Model Options
+// Model Options — Google Gemini (2025/2026)
 const AI_MODELS = [
-    { value: "gemini-2.0-flash", label: "Google Gemini 2.0 Flash (Recommended)" },
-    { value: "gemini-2.5-pro", label: "Google Gemini 2.5 Pro (Advanced)" },
-    { value: "replicate", label: "Replicate (Custom Models)" },
+    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (Most Capable)" },
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash ⭐ Recommended" },
+    { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite (Fastest)" },
+    { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash (Stable)" },
+    { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash-Lite (Economy)" },
 ];
 
 import { getUser } from "@/lib/supabase";
@@ -118,7 +120,7 @@ export default function ArticleWriterTool() {
     const [activePinterestToken, setActivePinterestToken] = useState("");
 
     // Model Selection
-    const [selectedModel, setSelectedModel] = useState("gemini-1.5-flash");
+    const [selectedModel, setSelectedModel] = useState("gemini-2.5-flash");
 
     // WordPress Creds (Local state for now)
     const [wpUrl, setWpUrl] = useState("");
