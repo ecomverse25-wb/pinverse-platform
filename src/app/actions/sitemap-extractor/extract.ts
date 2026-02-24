@@ -1,4 +1,5 @@
 "use server";
+// Sitemap Product Extractor - Server Action
 
 export interface ExtractedProduct {
     name: string;
