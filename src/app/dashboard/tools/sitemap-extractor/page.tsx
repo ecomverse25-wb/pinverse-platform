@@ -11,6 +11,7 @@ export default function SitemapExtractorPage() {
     const [progress, setProgress] = useState({ current: 0, total: 0 });
     const [failedCount, setFailedCount] = useState(0);
     const [fileName, setFileName] = useState("");
+    const [error, setError] = useState("");
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // ── XML Upload & Parse ─────────────────────────────────────────
@@ -18,10 +19,21 @@ export default function SitemapExtractorPage() {
         const file = e.target.files?.[0];
         if (!file) return;
         setFileName(file.name);
+        setError("");
 
         const reader = new FileReader();
         reader.onload = (ev) => {
             const text = ev.target?.result as string;
+            const trimmed = text.trimStart();
+
+            // Content-based validation: accept any file whose content is XML
+            if (!trimmed.startsWith("<?xml") && !trimmed.includes("<urlset") && !trimmed.includes("<loc")) {
+                setError("Invalid file format. Please upload an XML sitemap file.");
+                setUrls([]);
+                setResults([]);
+                return;
+            }
+
             const parser = new DOMParser();
             const xml = parser.parseFromString(text, "application/xml");
             const locElements = xml.getElementsByTagName("loc");
@@ -30,6 +42,15 @@ export default function SitemapExtractorPage() {
                 const url = locElements[i].textContent?.trim();
                 if (url) extracted.push(url);
             }
+
+            if (extracted.length === 0) {
+                setError("Invalid sitemap file. No <loc> tags found.");
+                setUrls([]);
+                setResults([]);
+                return;
+            }
+
+            setError("");
             setUrls(extracted);
             setResults([]);
             setFailedCount(0);
@@ -114,7 +135,6 @@ export default function SitemapExtractorPage() {
                     <input
                         ref={fileInputRef}
                         type="file"
-                        accept=".xml"
                         onChange={handleFileUpload}
                         className="hidden"
                     />
@@ -123,32 +143,44 @@ export default function SitemapExtractorPage() {
                         {fileName ? fileName : "Click to upload product-sitemap.xml"}
                     </p>
                     <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-                        Accepts .xml files (WooCommerce sitemaps supported)
+                        Upload any XML sitemap file (WooCommerce sitemaps supported)
                     </p>
                 </div>
 
+                {/* Error message */}
+                {error && (
+                    <div
+                        className="mt-4 flex items-center gap-2 px-4 py-3 rounded-lg"
+                        style={{ background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)" }}
+                    >
+                        <AlertTriangle className="w-5 h-5 flex-shrink-0" style={{ color: "#EF4444" }} />
+                        <span className="text-sm font-medium" style={{ color: "#EF4444" }}>
+                            {error}
+                        </span>
+                    </div>
+                )}
+
+                {/* URL count & Extract button */}
                 {urls.length > 0 && (
                     <div className="mt-4 flex items-center justify-between flex-wrap gap-4">
                         <div className="flex items-center gap-2">
-                            <Search className="w-5 h-5" style={{ color: "var(--primary)" }} />
-                            <span className="font-semibold" style={{ color: "var(--primary)" }}>
+                            <Search className="w-5 h-5" style={{ color: "#22C55E" }} />
+                            <span className="font-semibold" style={{ color: "#22C55E" }}>
                                 Found {urls.length} product URL{urls.length !== 1 ? "s" : ""}
                             </span>
                         </div>
                         <button
                             onClick={handleExtract}
                             disabled={isProcessing}
-                            className="px-5 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2 transition disabled:opacity-50"
+                            className="px-8 py-3.5 rounded-xl font-bold text-base flex items-center gap-2 transition disabled:opacity-50 shadow-lg hover:scale-105"
                             style={{ background: "var(--primary)", color: "#0F172A" }}
                         >
                             {isProcessing ? (
                                 <>
-                                    <Loader2 className="w-4 h-4 animate-spin" /> Extracting…
+                                    <Loader2 className="w-5 h-5 animate-spin" /> Extracting…
                                 </>
                             ) : (
-                                <>
-                                    <Search className="w-4 h-4" /> Extract Products
-                                </>
+                                "Extract Products →"
                             )}
                         </button>
                     </div>
