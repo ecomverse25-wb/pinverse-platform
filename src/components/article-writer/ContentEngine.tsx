@@ -66,34 +66,45 @@ function findBestProductMatch(h2Text: string, products: Product[], usedIndices: 
     return null;
 }
 
-// --- Dark-themed product card HTML ---
+// --- Pinterest 2:3 aspect ratio product card HTML ---
 function buildProductCardHTML(product: Product): string {
-    return `<div style="margin: 1.5rem auto; padding: 1rem; border: 1px solid #334155; border-radius: 0.75rem; background: #252d3d; max-width: 24rem; text-align: center;">
-        <img src="${product.image}" alt="${product.name}" style="width: 100%; height: 16rem; object-fit: cover; border-radius: 0.5rem; margin-bottom: 1rem;" />
-        <h3 style="font-weight: 700; font-size: 1.1rem; margin-bottom: 0.5rem; color: #ffffff;">${product.name}</h3>
-        <a href="${product.link}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background: #f0c040; color: #1a1f2e; padding: 0.5rem 1.5rem; border-radius: 0.5rem; font-weight: 600; text-decoration: none;">Check Price</a>
+    const pinUrl = `https://pinterest.com/pin/create/button/?url=${encodeURIComponent(product.link)}&media=${encodeURIComponent(product.image)}&description=${encodeURIComponent(product.name)}`;
+    return `<div class="article-product-card" style="margin: 1.5rem auto; border: 1px solid #334155; border-radius: 12px; background: #252d3d; max-width: 280px; overflow: hidden;">
+        <div style="position: relative; width: 100%; aspect-ratio: 2/3; overflow: hidden;">
+            <img src="${product.image}" alt="${product.name}" style="width: 100%; height: 100%; object-fit: cover; display: block;" />
+            <a href="${pinUrl}" target="_blank" rel="noopener noreferrer" title="Save to Pinterest" style="position: absolute; top: 0.75rem; right: 0.75rem; width: 36px; height: 36px; background: #e60023; border-radius: 50%; display: flex; align-items: center; justify-content: center; text-decoration: none; box-shadow: 0 2px 8px rgba(0,0,0,0.3); transition: transform 0.2s;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M12 0C5.373 0 0 5.373 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.993 3.995-.282 1.193.599 2.165 1.775 2.165 2.128 0 3.768-2.245 3.768-5.487 0-2.861-2.063-4.869-5.008-4.869-3.41 0-5.409 2.562-5.409 5.199 0 1.033.394 2.143.889 2.741.099.12.112.225.085.345-.091.375-.293 1.199-.334 1.363-.053.225-.174.271-.402.165-1.495-.69-2.433-2.878-2.433-4.646 0-3.776 2.748-7.252 7.92-7.252 4.158 0 7.392 2.967 7.392 6.923 0 4.135-2.607 7.462-6.233 7.462-1.214 0-2.354-.629-2.758-1.379l-.749 2.848c-.269 1.045-1.004 2.352-1.498 3.146 1.123.345 2.306.535 3.55.535 6.627 0 12-5.373 12-12C24 5.373 18.627 0 12 0z"/></svg>
+            </a>
+        </div>
+        <div style="padding: 0.75rem 1rem 1rem; text-align: center; background: #252d3d;">
+            <h3 style="font-weight: 700; font-size: 0.95rem; margin: 0 0 0.5rem; color: #ffffff; line-height: 1.3;">${product.name}</h3>
+            <a href="${product.link}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background: #f0c040; color: #1a1f2e; padding: 0.45rem 1.25rem; border-radius: 8px; font-weight: 600; font-size: 0.85rem; text-decoration: none;">Check Price →</a>
+        </div>
     </div>`;
 }
 
-// --- Placeholder card when no product match ---
+// --- Placeholder card when no product match (2:3 ratio) ---
 function buildPlaceholderCardHTML(h2Text: string): string {
-    return `<div style="margin: 1.5rem auto; padding: 2rem 1rem; border: 2px dashed #334155; border-radius: 0.75rem; background: #252d3d; max-width: 24rem; text-align: center;">
-        <div style="font-size: 2.5rem; margin-bottom: 0.75rem; opacity: 0.5;">📷</div>
-        <p style="font-size: 0.85rem; color: #94a3b8; margin: 0;">${h2Text}</p>
-        <span style="display: inline-block; margin-top: 0.5rem; padding: 0.15rem 0.5rem; border-radius: 9999px; background: #334155; color: #94a3b8; font-size: 0.7rem;">AI Generated Image</span>
+    return `<div class="article-product-card" style="margin: 1.5rem auto; border: 2px dashed #334155; border-radius: 12px; background: #252d3d; max-width: 280px; overflow: hidden;">
+        <div style="width: 100%; aspect-ratio: 2/3; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, #1e293b 0%, #252d3d 100%);">
+            <div style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.4;">📷</div>
+            <p style="font-size: 0.85rem; color: #94a3b8; margin: 0; padding: 0 1rem; text-align: center; line-height: 1.4;">${h2Text}</p>
+        </div>
+        <div style="padding: 0.5rem 1rem; text-align: center; background: #252d3d;">
+            <span style="display: inline-block; padding: 0.2rem 0.6rem; border-radius: 9999px; background: #334155; color: #94a3b8; font-size: 0.7rem;">AI Generated Image</span>
+        </div>
     </div>`;
 }
 
-// --- Inject product cards after each H2 section ---
+// --- Inject product cards DIRECTLY after each </h2> tag ---
 function injectProductCards(html: string, products: Product[]): string {
-    // Split the HTML at each <h2> tag to identify sections
+    // Find all <h2>...</h2> tags with their full match positions
     const h2Regex = /<h2[^>]*>(.*?)<\/h2>/gi;
-    const h2Matches: { text: string; index: number }[] = [];
+    const h2Matches: { text: string; fullMatchEnd: number }[] = [];
     let match;
     while ((match = h2Regex.exec(html)) !== null) {
-        // Strip HTML tags from the H2 text for matching
         const plainText = match[1].replace(/<[^>]*>/g, '').trim();
-        h2Matches.push({ text: plainText, index: match.index });
+        h2Matches.push({ text: plainText, fullMatchEnd: match.index + match[0].length });
     }
 
     if (h2Matches.length === 0) return html;
@@ -104,10 +115,6 @@ function injectProductCards(html: string, products: Product[]): string {
 
     for (let i = 0; i < h2Matches.length; i++) {
         const h2 = h2Matches[i];
-        // Find the end of this H2's section (before next H2 or end of content)
-        const nextH2Start = i + 1 < h2Matches.length ? h2Matches[i + 1].index : html.length;
-
-        // Find the best insertion point — right before the next H2 or end
         const bestMatch = findBestProductMatch(h2.text, products, usedIndices);
 
         let cardHTML: string;
@@ -118,14 +125,15 @@ function injectProductCards(html: string, products: Product[]): string {
             cardHTML = buildPlaceholderCardHTML(h2.text);
         }
 
-        injections.push({ position: nextH2Start, cardHTML });
+        // Insert directly after the closing </h2> tag
+        injections.push({ position: h2.fullMatchEnd, cardHTML });
     }
 
     // Insert from end to start so positions stay valid
     let result = html;
     for (let i = injections.length - 1; i >= 0; i--) {
         const { position, cardHTML } = injections[i];
-        result = result.slice(0, position) + cardHTML + result.slice(position);
+        result = result.slice(0, position) + '\n' + cardHTML + '\n' + result.slice(position);
     }
 
     return result;
