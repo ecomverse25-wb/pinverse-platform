@@ -70,10 +70,15 @@ function extractImage(html: string): string {
 
 async function fetchAndExtract(url: string): Promise<ExtractedProduct | null> {
     try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+
         const response = await fetch(url, {
             headers: { "User-Agent": USER_AGENT },
-            signal: AbortSignal.timeout(15000),
+            signal: controller.signal,
         });
+
+        clearTimeout(timeout);
 
         if (!response.ok) return null;
 
