@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Play, Check, Share, RefreshCw, ArrowRight, Trash2, FileText, AlertCircle, Clock, Camera } from "lucide-react";
 
-import { generateArticleAction } from "@/app/actions/ai-actions";
+import { generateArticleAction, matchProductsToSectionsAction, generateSectionImageAction } from "@/app/actions/ai-actions";
 import { publishPostAction } from "@/app/actions/wp-actions";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -15,6 +15,7 @@ interface ContentEngineProps {
     clusters: KeywordCluster[];
     products: Product[];
     apiKey: string;
+    replicateKey?: string;
     wpCredentials: WPCredentials;
     articles: ArticleData[];
     setArticles: (articles: ArticleData[]) => void;
@@ -25,7 +26,7 @@ interface ContentEngineProps {
 import { usePrompts } from "./usePrompts";
 import { PromptCategory } from "./prompts";
 
-// --- Stop words for keyword extraction ---
+// --- Stop words for secondary keyword validation ---
 const STOP_WORDS = new Set([
     'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
     'of', 'with', 'by', 'from', 'is', 'it', 'that', 'this', 'are', 'was',
@@ -39,31 +40,30 @@ const STOP_WORDS = new Set([
     'into', 'out', 'over', 'own', 'same', 'then', 'these', 'those', 'up',
 ]);
 
-// --- Fuzzy product matching for an H2 heading ---
-function findBestProductMatch(h2Text: string, products: Product[], usedIndices: Set<number>): { product: Product; index: number } | null {
-    const h2Words = h2Text.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2 && !STOP_WORDS.has(w));
-    if (h2Words.length === 0 || products.length === 0) return null;
+// --- Secondary keyword validation: do product name and H2 share any real words? ---
+function sharesKeyword(h2Text: string, productName: string): boolean {
+    const extractWords = (text: string) =>
+        text.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2 && !STOP_WORDS.has(w));
+    const h2Words = new Set(extractWords(h2Text));
+    const productWords = extractWords(productName);
+    return productWords.some(w => h2Words.has(w));
+}
 
-    let bestScore = 0;
-    let bestIdx = -1;
-
-    for (let i = 0; i < products.length; i++) {
-        if (usedIndices.has(i)) continue; // avoid reusing the same product
-        const nameLower = products[i].name.toLowerCase();
-        let score = 0;
-        for (const word of h2Words) {
-            if (nameLower.includes(word)) score++;
-        }
-        if (score > bestScore) {
-            bestScore = score;
-            bestIdx = i;
-        }
+// --- Extract H2 sections with their following paragraph descriptions ---
+function extractSectionsFromHTML(html: string): { heading: string; description: string }[] {
+    const sections: { heading: string; description: string }[] = [];
+    const h2Regex = /<h2[^>]*>(.*?)<\/h2>/gi;
+    let match;
+    while ((match = h2Regex.exec(html)) !== null) {
+        const heading = match[1].replace(/<[^>]*>/g, '').trim();
+        // Grab text after this H2 until the next H2 or end
+        const afterH2 = html.slice(match.index + match[0].length);
+        const nextH2Idx = afterH2.search(/<h2[^>]*>/i);
+        const sectionHTML = nextH2Idx >= 0 ? afterH2.slice(0, nextH2Idx) : afterH2;
+        const description = sectionHTML.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+        sections.push({ heading, description });
     }
-
-    if (bestScore > 0 && bestIdx >= 0) {
-        return { product: products[bestIdx], index: bestIdx };
-    }
-    return null;
+    return sections;
 }
 
 // --- Pinterest 2:3 aspect ratio product card HTML ---
@@ -96,8 +96,24 @@ function buildPlaceholderCardHTML(h2Text: string): string {
     </div>`;
 }
 
-// --- Inject product cards DIRECTLY after each </h2> tag ---
-function injectProductCards(html: string, products: Product[]): string {
+// --- AI-generated image card (2:3 ratio) ---
+function buildAIImageCardHTML(imageUrl: string, h2Text: string): string {
+    return `<div class="article-product-card" style="margin: 1.5rem auto; border: 1px solid #334155; border-radius: 12px; background: #252d3d; max-width: 280px; overflow: hidden;">
+        <div style="position: relative; width: 100%; aspect-ratio: 2/3; overflow: hidden;">
+            <img src="${imageUrl}" alt="${h2Text}" style="width: 100%; height: 100%; object-fit: cover; display: block;" />
+        </div>
+        <div style="padding: 0.5rem 1rem; text-align: center; background: #252d3d;">
+            <span style="display: inline-block; padding: 0.2rem 0.6rem; border-radius: 9999px; background: #334155; color: #94a3b8; font-size: 0.7rem;">✨ AI Generated</span>
+        </div>
+    </div>`;
+}
+
+// --- Inject product cards DIRECTLY after each </h2> tag using pre-matched map ---
+function injectProductCards(
+    html: string,
+    sectionProductMap: Map<number, Product>,
+    sectionImageMap: Map<number, string>
+): string {
     // Find all <h2>...</h2> tags with their full match positions
     const h2Regex = /<h2[^>]*>(.*?)<\/h2>/gi;
     const h2Matches: { text: string; fullMatchEnd: number }[] = [];
@@ -109,23 +125,22 @@ function injectProductCards(html: string, products: Product[]): string {
 
     if (h2Matches.length === 0) return html;
 
-    // For each H2, find the best product match
-    const usedIndices = new Set<number>();
     const injections: { position: number; cardHTML: string }[] = [];
 
     for (let i = 0; i < h2Matches.length; i++) {
         const h2 = h2Matches[i];
-        const bestMatch = findBestProductMatch(h2.text, products, usedIndices);
+        const matchedProduct = sectionProductMap.get(i);
+        const aiImageUrl = sectionImageMap.get(i);
 
         let cardHTML: string;
-        if (bestMatch) {
-            usedIndices.add(bestMatch.index);
-            cardHTML = buildProductCardHTML(bestMatch.product);
+        if (matchedProduct) {
+            cardHTML = buildProductCardHTML(matchedProduct);
+        } else if (aiImageUrl) {
+            cardHTML = buildAIImageCardHTML(aiImageUrl, h2.text);
         } else {
             cardHTML = buildPlaceholderCardHTML(h2.text);
         }
 
-        // Insert directly after the closing </h2> tag
         injections.push({ position: h2.fullMatchEnd, cardHTML });
     }
 
@@ -145,6 +160,13 @@ function sanitizeContent(html: string): string {
 
     // Strip code fences: ```html, ```, etc.
     cleaned = cleaned.replace(/```[\w]*\s*/g, '').replace(/```/g, '');
+
+    // Remove lines that are only asterisks, dashes, or horizontal rules
+    cleaned = cleaned.replace(/^\s*[\*\-]{3,}\s*$/gm, '');
+    cleaned = cleaned.replace(/<hr\s*\/?>/gi, '');
+
+    // Remove empty paragraphs left behind
+    cleaned = cleaned.replace(/<p>\s*<\/p>/gi, '');
 
     // Style H1 white, H2 gold
     cleaned = cleaned.replace(/<h1([^>]*)>/gi, '<h1$1 style="color: #ffffff;">');
@@ -179,7 +201,7 @@ const StatusBadge = ({ status }: { status: ArticleData['wpStatus'] }) => {
     );
 };
 
-export default function ContentEngine({ clusters, products, apiKey, wpCredentials, articles, setArticles, onNext, selectedModel }: ContentEngineProps) {
+export default function ContentEngine({ clusters, products, apiKey, replicateKey, wpCredentials, articles, setArticles, onNext, selectedModel }: ContentEngineProps) {
     const [selectedTopic, setSelectedTopic] = useState<KeywordCluster | null>(null);
     const [generating, setGenerating] = useState(false);
     const [publishing, setPublishing] = useState(false);
@@ -258,12 +280,70 @@ export default function ContentEngine({ clusters, products, apiKey, wpCredential
             // Sanitize: strip code fences, apply dark heading styles
             content = sanitizeContent(content);
 
-            // Inject product cards after each H2 section
-            content = injectProductCards(content, products);
-
             // Extract Title from H1
             const titleMatch = content.match(/<h1[^>]*>(.*?)<\/h1>/i);
             const title = titleMatch ? titleMatch[1].replace(/<[^>]*>/g, '') : selectedTopic.topic;
+
+            // --- AI-powered product matching ---
+            const sections = extractSectionsFromHTML(content);
+            const sectionProductMap = new Map<number, Product>();
+            const sectionImageMap = new Map<number, string>();
+
+            if (sections.length > 0 && products.length > 0) {
+                const matchResult = await matchProductsToSectionsAction(
+                    title,
+                    selectedTopic.topic,
+                    sections,
+                    products.map(p => p.name),
+                    apiKey,
+                    selectedModel
+                );
+
+                if (matchResult.success && matchResult.matches) {
+                    for (const m of matchResult.matches) {
+                        if (m.productIndex !== null && m.productIndex >= 0 && m.productIndex < products.length) {
+                            const product = products[m.productIndex];
+                            const heading = sections[m.sectionIndex]?.heading || '';
+                            // Secondary keyword validation: reject if zero shared keywords
+                            if (sharesKeyword(heading, product.name)) {
+                                sectionProductMap.set(m.sectionIndex, product);
+                            } else {
+                                console.warn(`Keyword check rejected: "${product.name}" for H2 "${heading}"`);
+                            }
+                        }
+                    }
+                } else if (matchResult.error) {
+                    console.warn("AI product matching failed, using placeholders:", matchResult.error);
+                }
+            }
+
+            // --- Generate AI images for unmatched sections (if Replicate key available) ---
+            if (replicateKey && sections.length > 0) {
+                const unmatchedIndices = sections
+                    .map((_, i) => i)
+                    .filter(i => !sectionProductMap.has(i));
+
+                // Generate images in parallel (max 5 at a time to avoid overload)
+                const batch = unmatchedIndices.slice(0, 5);
+                const imageResults = await Promise.allSettled(
+                    batch.map(i =>
+                        generateSectionImageAction(
+                            sections[i].heading,
+                            selectedTopic.topic,
+                            replicateKey
+                        ).then(res => ({ index: i, result: res }))
+                    )
+                );
+
+                for (const settled of imageResults) {
+                    if (settled.status === 'fulfilled' && settled.value.result.success && settled.value.result.imageUrl) {
+                        sectionImageMap.set(settled.value.index, settled.value.result.imageUrl);
+                    }
+                }
+            }
+
+            // Inject product cards after each H2 section using AI matches
+            content = injectProductCards(content, sectionProductMap, sectionImageMap);
 
             // Extract a Hero Image candidate (first product image or null)
             const heroImage = products.length > 0 ? products[0].image : undefined;
