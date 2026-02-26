@@ -16,6 +16,76 @@ export type ImageStyle =
 
 export type ImageDimensions = '1024x1536' | '1536x864' | '1024x1024';
 
+// ─── Provider Types ───
+export type WritingProvider = 'google' | 'claude' | 'openai' | 'replicate';
+export type ImageProvider = 'google-imagen' | 'replicate';
+
+// ─── Writing Model Lists ───
+export const GEMINI_WRITING_MODELS = [
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro ★ Best Quality' },
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash ⚡ Recommended' },
+    { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite 💰 Fastest' },
+];
+export const CLAUDE_WRITING_MODELS = [
+    { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 ★ Most Powerful' },
+    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 ⚡ Best Value' },
+    { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+    { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 💰 Fastest' },
+];
+export const OPENAI_WRITING_MODELS = [
+    { value: 'gpt-5.2', label: 'GPT-5.2 ★ Latest Flagship' },
+    { value: 'gpt-5.2-instant', label: 'GPT-5.2 Instant ⚡ Fast' },
+    { value: 'gpt-5-nano', label: 'GPT-5 Nano 💰 Cheapest' },
+    { value: 'gpt-5-mini', label: 'GPT-5 Mini' },
+];
+export const REPLICATE_WRITING_MODELS = [
+    { value: 'deepseek-ai/deepseek-v3', label: 'DeepSeek V3-0324 ★ Best Open Model' },
+    { value: 'google-deepmind/gemini-2.5-flash', label: 'Gemini 2.5 Flash (via Replicate)' },
+];
+
+// ─── Image Model Lists ───
+export const GOOGLE_IMAGE_MODELS = [
+    { value: 'imagen-3.0-generate-002', label: 'Imagen 3 ★ Best Quality — $0.03/img' },
+    { value: 'imagen-3.0-fast-generate-001', label: 'Imagen 3 Fast ⚡ — $0.02/img' },
+];
+export const REPLICATE_IMAGE_MODELS = [
+    { value: 'black-forest-labs/flux-2-pro', label: 'Flux 2 Pro ★ Best Quality — ~$0.05' },
+    { value: 'black-forest-labs/flux-1.1-pro', label: 'Flux 1.1 Pro ⚡ Fast & Sharp — ~$0.04' },
+    { value: 'black-forest-labs/flux-2-max', label: 'Flux 2 Max 🔥 Highest Fidelity — ~$0.06' },
+    { value: 'recraft-ai/recraft-v4', label: 'Recraft V4 🎨 Design Taste — $0.04' },
+    { value: 'ideogram-ai/ideogram-v3-quality', label: 'Ideogram V3 Quality 📝 Best Text — ~$0.05' },
+    { value: 'ideogram-ai/ideogram-v3-balanced', label: 'Ideogram V3 Balanced ⚡ — ~$0.04' },
+    { value: 'bytedance/seedream-4.5', label: 'SeeDream 4.5 🎬 Cinematic — $0.04' },
+    { value: 'prunaai/z-image-turbo', label: 'Z-Image Turbo 💰 Cheapest — $0.01' },
+    { value: 'black-forest-labs/flux-dev', label: 'Flux Dev — ~$0.03' },
+    { value: 'black-forest-labs/flux-schnell', label: 'Flux Schnell ⚡ Fastest — ~$0.003' },
+    { value: 'lucataco/sdxl-lightning-4step', label: 'SDXL Lightning (4-step) — ~$0.002' },
+];
+
+// ─── Provider Defaults ───
+export const DEFAULT_WRITING_MODELS: Record<WritingProvider, string> = {
+    google: 'gemini-2.5-flash',
+    claude: 'claude-sonnet-4-6',
+    openai: 'gpt-5.2-instant',
+    replicate: 'deepseek-ai/deepseek-v3',
+};
+export const DEFAULT_IMAGE_MODELS: Record<ImageProvider, string> = {
+    'google-imagen': 'imagen-3.0-generate-002',
+    replicate: 'black-forest-labs/flux-1.1-pro',
+};
+
+// ─── Writing Model Lookup ───
+export const WRITING_MODELS_BY_PROVIDER: Record<WritingProvider, { value: string; label: string }[]> = {
+    google: GEMINI_WRITING_MODELS,
+    claude: CLAUDE_WRITING_MODELS,
+    openai: OPENAI_WRITING_MODELS,
+    replicate: REPLICATE_WRITING_MODELS,
+};
+export const IMAGE_MODELS_BY_PROVIDER: Record<ImageProvider, { value: string; label: string }[]> = {
+    'google-imagen': GOOGLE_IMAGE_MODELS,
+    replicate: REPLICATE_IMAGE_MODELS,
+};
+
 export interface AffiliateLink {
     productName: string;
     url: string;
@@ -61,6 +131,7 @@ export interface BlogArticle {
     sectionImages: SectionImage[];
     status: 'pending' | 'generating' | 'ready' | 'error' | 'published';
     errorMessage?: string;
+    imageError?: string;
     wpLink?: string;
     wpPostId?: number;
 }

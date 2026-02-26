@@ -5,11 +5,14 @@ import type {
     BlogMonetizerSettings, ParsedKeyword, BlogArticle,
     WPCredentials, FeaturedImageSettings, AffiliateLink,
     Tone, ArticleLength, H2Count, ImageStyle, ImageDimensions, SectionImage,
+    WritingProvider, ImageProvider,
 } from "./BlogMonetizer.types";
 import {
     DEFAULT_SETTINGS, TONE_OPTIONS, ARTICLE_LENGTH_OPTIONS,
     H2_COUNT_OPTIONS, IMAGE_STYLE_OPTIONS, IMAGE_DIMENSION_OPTIONS,
     DEFAULT_IMAGE_PROMPT_TEMPLATE,
+    WRITING_MODELS_BY_PROVIDER, IMAGE_MODELS_BY_PROVIDER,
+    DEFAULT_WRITING_MODELS, DEFAULT_IMAGE_MODELS,
 } from "./BlogMonetizer.types";
 import {
     generateBulkTitlesAction, generateSingleTitleAction,
@@ -23,12 +26,16 @@ import BlogMonetizerEditor from "./BlogMonetizerEditor";
 import BlogMonetizerPinExport from "./BlogMonetizerPinExport";
 import { getUserSettingsAction, updateUserSettingsAction } from "@/app/actions/user-settings-actions";
 
-// ─── AI Models ───
-const AI_MODELS = [
-    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (Most Capable)" },
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash ⭐ Recommended" },
-    { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite (Fastest)" },
-    { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash (Stable)" },
+// ─── Provider Labels ───
+const WRITING_PROVIDER_OPTIONS: { value: WritingProvider; label: string }[] = [
+    { value: "google", label: "Google Gemini" },
+    { value: "claude", label: "Anthropic Claude" },
+    { value: "openai", label: "OpenAI" },
+    { value: "replicate", label: "Replicate (DeepSeek/Open Models)" },
+];
+const IMAGE_PROVIDER_OPTIONS: { value: ImageProvider; label: string }[] = [
+    { value: "google-imagen", label: "Google Imagen" },
+    { value: "replicate", label: "Replicate" },
 ];
 
 // ─── localStorage helpers ───
@@ -86,7 +93,14 @@ export default function BlogMonetizer() {
     const [geminiKey, setGeminiKey] = useState("");
     const [replicateKey, setReplicateKey] = useState("");
     const [imgbbKey, setImgbbKey] = useState("");
-    const [selectedModel, setSelectedModel] = useState("gemini-2.5-flash");
+    const [anthropicKey, setAnthropicKey] = useState("");
+    const [openaiKey, setOpenaiKey] = useState("");
+
+    // ─── Provider & Model selections ───
+    const [writingProvider, setWritingProvider] = useState<WritingProvider>("google");
+    const [writingModel, setWritingModel] = useState("gemini-2.5-flash");
+    const [imageProvider, setImageProvider] = useState<ImageProvider>("google-imagen");
+    const [imageModel, setImageModel] = useState("imagen-3.0-generate-002");
 
     // WP
     const [wpUrl, setWpUrl] = useState(() => loadLS("wp_url", ""));
@@ -128,6 +142,8 @@ export default function BlogMonetizer() {
                 if (s.gemini_api_key) setGeminiKey(s.gemini_api_key);
                 if (s.replicate_api_key) setReplicateKey(s.replicate_api_key);
                 if (s.imgbb_api_key) setImgbbKey(s.imgbb_api_key);
+                if (s.anthropic_api_key) setAnthropicKey(s.anthropic_api_key);
+                if (s.openai_api_key) setOpenaiKey(s.openai_api_key);
             }
         })();
     }, []);
@@ -173,15 +189,35 @@ export default function BlogMonetizer() {
     };
 
     // Save API key
-    const saveApiKey = async (type: "gemini" | "replicate" | "imgbb", value: string) => {
+    const saveApiKey = async (type: "gemini" | "replicate" | "imgbb" | "anthropic" | "openai", value: string) => {
         if (!value) return;
         const payload: Record<string, string> = {};
         if (type === "gemini") payload.gemini_api_key = value;
         if (type === "replicate") payload.replicate_api_key = value;
         if (type === "imgbb") payload.imgbb_api_key = value;
+        if (type === "anthropic") payload.anthropic_api_key = value;
+        if (type === "openai") payload.openai_api_key = value;
         await updateUserSettingsAction(payload);
         setStatusMessage(`✅ ${type.toUpperCase()} key saved.`);
         setTimeout(() => setStatusMessage(""), 3000);
+    };
+
+    // ─── Get the correct API key for writing ───
+    const getWritingApiKey = () => {
+        switch (writingProvider) {
+            case "google": return geminiKey;
+            case "claude": return anthropicKey;
+            case "openai": return openaiKey;
+            case "replicate": return replicateKey;
+        }
+    };
+    const getWritingKeyLabel = () => {
+        switch (writingProvider) {
+            case "google": return "Gemini";
+            case "claude": return "Anthropic";
+            case "openai": return "OpenAI";
+            case "replicate": return "Replicate";
+        }
     };
 
     // ─── File Upload Handler ───
@@ -224,12 +260,16 @@ export default function BlogMonetizer() {
     const handleGenerateTitles = async () => {
         const checked = parsedKeywords.filter(k => k.checked).map(k => k.text);
         if (checked.length === 0) { alert("No keywords selected."); return; }
-        if (!geminiKey) { alert("Gemini API key required."); return; }
+        const wKey = getWritingApiKey();
+        if (!wKey) { alert(`${getWritingKeyLabel()} API key required.`); return; }
 
         setTitleGenerating(true);
         setStatusMessage("✨ Generating titles... (1 API call)");
 
-        const result = await generateBulkTitlesAction(checked, settings.tone, settings.niche, geminiKey, selectedModel);
+        const result = await generateBulkTitlesAction(
+            checked, settings.tone, settings.niche, geminiKey, writingModel,
+            writingProvider, anthropicKey, openaiKey, replicateKey
+        );
 
         if (result.success && result.titles) {
             setParsedKeywords(prev => prev.map(k => {
@@ -247,8 +287,11 @@ export default function BlogMonetizer() {
     // Regenerate single title
     const regenerateTitle = async (idx: number) => {
         const kw = parsedKeywords[idx];
-        if (!kw || !geminiKey) return;
-        const result = await generateSingleTitleAction(kw.text, settings.tone, settings.niche, geminiKey, selectedModel);
+        if (!kw || !getWritingApiKey()) return;
+        const result = await generateSingleTitleAction(
+            kw.text, settings.tone, settings.niche, geminiKey, writingModel,
+            writingProvider, anthropicKey, openaiKey, replicateKey
+        );
         if (result.success && result.title) {
             setParsedKeywords(prev => {
                 const copy = [...prev];
@@ -319,14 +362,15 @@ export default function BlogMonetizer() {
                 copy[i] = { ...copy[i], status: "generating" };
                 return copy;
             });
-            setStatusMessage(`⚡ Generating: "${item.keyword}" (${i + 1}/${newArticles.length})`);
+            setStatusMessage(`⚡ Generating article text: "${item.keyword}" (${i + 1}/${newArticles.length})`);
 
             try {
                 // Step 1: Generate article text
                 const artResult = await generateBlogArticleAction(
                     item.title, item.keyword, settings.niche,
                     settings.tone, settings.articleLength, settings.h2Count,
-                    geminiKey, selectedModel
+                    geminiKey, writingModel, writingProvider,
+                    anthropicKey, openaiKey, replicateKey
                 );
 
                 if (!artResult.success || !artResult.content) {
@@ -341,17 +385,26 @@ export default function BlogMonetizer() {
 
                 let finalContent = artResult.content;
 
+                // Extract AI-generated title from the H1 tag in the content
+                let generatedTitle = item.title;
+                const h1Match = finalContent.match(/<h1[^>]*>(.*?)<\/h1>/i);
+                if (h1Match) {
+                    generatedTitle = h1Match[1].replace(/<[^>]*>/g, "").trim();
+                }
+
                 // Step 2: Inject affiliate links
                 if (settings.affiliateLinks.length > 0) {
+                    setStatusMessage(`🔗 Injecting affiliate links: "${item.keyword}"`);
                     const affResult = await matchAffiliateLinksAction(
-                        finalContent, settings.affiliateLinks, geminiKey, selectedModel
+                        finalContent, settings.affiliateLinks, geminiKey, writingModel,
+                        writingProvider, anthropicKey, openaiKey, replicateKey
                     );
                     if (affResult.success && affResult.injectedHtml) {
                         finalContent = affResult.injectedHtml;
                     }
                 }
 
-                // Step 3: Generate images (featured + H2) in parallel
+                // Step 3: Generate images (featured + H2)
                 const sectionImages: SectionImage[] = [];
                 const h2Regex = /<h2[^>]*>(.*?)<\/h2>/gi;
                 const h2Headings: string[] = [];
@@ -360,49 +413,60 @@ export default function BlogMonetizer() {
                     h2Headings.push(h2Match[1].replace(/<[^>]*>/g, ""));
                 }
 
-                const imagePromises: Promise<void>[] = [];
-
-                // Featured image
+                let imageError: string | undefined;
                 let featuredImageUrl: string | undefined;
                 let featuredImagePrompt: string | undefined;
-                if (replicateKey) {
-                    const summary = finalContent.replace(/<[^>]*>/g, " ").slice(0, 800);
-                    imagePromises.push(
-                        generateFeaturedImageAction(
-                            item.title, summary,
+
+                const hasImageKey = imageProvider === "google-imagen" ? !!geminiKey : !!replicateKey;
+
+                if (hasImageKey) {
+                    // Featured image
+                    setStatusMessage(`🖼️ Generating featured image: "${item.keyword}"`);
+                    try {
+                        const summary = finalContent.replace(/<[^>]*>/g, " ").slice(0, 800);
+                        const featResult = await generateFeaturedImageAction(
+                            generatedTitle, summary,
                             settings.featuredImage.promptTemplate,
                             settings.featuredImage.style,
                             settings.featuredImage.colorMood,
                             settings.featuredImage.dimensions,
-                            geminiKey, replicateKey, imgbbKey, selectedModel
-                        ).then(result => {
-                            if (result.success && result.imageUrl) {
-                                featuredImageUrl = result.imageUrl;
-                                featuredImagePrompt = result.prompt;
-                            }
-                        }).catch(() => { })
-                    );
-
-                    // H2 section images
-                    for (let j = 0; j < h2Headings.length; j++) {
-                        const heading = h2Headings[j];
-                        const jIdx = j;
-                        imagePromises.push(
-                            generateH2ImageAction(heading, settings.niche, replicateKey, imgbbKey)
-                                .then(result => {
-                                    if (result.success && result.imageUrl) {
-                                        sectionImages.push({
-                                            h2Index: jIdx,
-                                            h2Title: heading,
-                                            imageUrl: result.imageUrl,
-                                        });
-                                    }
-                                }).catch(() => { })
+                            geminiKey, replicateKey, imgbbKey, writingModel,
+                            imageProvider, imageModel
                         );
+                        if (featResult.success && featResult.imageUrl) {
+                            featuredImageUrl = featResult.imageUrl;
+                            featuredImagePrompt = featResult.prompt;
+                        } else {
+                            imageError = featResult.error || "Featured image generation failed";
+                            console.error("[BlogMonetizer] Featured image failed:", featResult.error);
+                        }
+                    } catch (err) {
+                        imageError = err instanceof Error ? err.message : "Featured image error";
+                        console.error("[BlogMonetizer] Featured image exception:", err);
                     }
 
-                    setStatusMessage(`🖼️ Generating images for "${item.keyword}"...`);
-                    await Promise.all(imagePromises);
+                    // H2 section images — generate sequentially with progress
+                    for (let j = 0; j < h2Headings.length; j++) {
+                        setStatusMessage(`🎨 Generating section images: ${j + 1}/${h2Headings.length} — "${item.keyword}"`);
+                        try {
+                            const secResult = await generateH2ImageAction(
+                                h2Headings[j], settings.niche, replicateKey, imgbbKey,
+                                imageProvider, imageModel, geminiKey,
+                                settings.featuredImage.dimensions
+                            );
+                            if (secResult.success && secResult.imageUrl) {
+                                sectionImages.push({
+                                    h2Index: j,
+                                    h2Title: h2Headings[j],
+                                    imageUrl: secResult.imageUrl,
+                                });
+                            }
+                        } catch (err) {
+                            console.error(`[BlogMonetizer] Section image ${j} failed:`, err);
+                        }
+                    }
+                } else {
+                    imageError = `${imageProvider === "google-imagen" ? "Gemini" : "Replicate"} API key not set — images skipped`;
                 }
 
                 // Inject section images into HTML (after each H2)
@@ -427,17 +491,20 @@ export default function BlogMonetizer() {
                     }
                 }
 
-                // Step 4: Mark ready
+                // Step 4: Mark ready with extracted title
+                setStatusMessage(`✅ Complete: "${generatedTitle}"`);
                 setArticles(prev => {
                     const copy = [...prev];
                     copy[i] = {
                         ...copy[i],
+                        title: generatedTitle,
                         content: finalContent,
                         metaDescription: artResult.metaDescription || "",
                         wordCount: artResult.wordCount || 0,
                         featuredImageUrl,
                         featuredImagePrompt,
                         sectionImages,
+                        imageError,
                         status: "ready",
                     };
                     return copy;
@@ -582,36 +649,132 @@ export default function BlogMonetizer() {
             {/* ━━━━━━━━ SETUP TAB ━━━━━━━━ */}
             {activeTab === "setup" && (
                 <div>
-                    {/* API Keys */}
+                    {/* API Keys & Models */}
                     <div style={cardStyle}>
-                        <h3 style={{ color: "#f0c040", fontSize: 16, fontWeight: 700, marginBottom: 12, marginTop: 0 }}>🔑 API Keys</h3>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                            <div>
-                                <label style={labelStyle}>AI Model</label>
-                                <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)} style={selectStyle}>
-                                    {AI_MODELS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                                </select>
+                        <h3 style={{ color: "#f0c040", fontSize: 16, fontWeight: 700, marginBottom: 16, marginTop: 0 }}>🔑 API Keys & Models</h3>
+
+                        {/* ── Writing Provider ── */}
+                        <div style={{ marginBottom: 20 }}>
+                            <label style={{ ...labelStyle, fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>✍️ Writing Provider</label>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                                {WRITING_PROVIDER_OPTIONS.map(p => (
+                                    <label key={p.value} style={{
+                                        display: "flex", alignItems: "center", gap: 6,
+                                        background: writingProvider === p.value ? "#1e3a5f" : "#1e2a3a",
+                                        border: `1px solid ${writingProvider === p.value ? "#f0c040" : "#334155"}`,
+                                        borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontSize: 13, color: "#e2e8f0",
+                                    }}>
+                                        <input type="radio" name="writingProvider" value={p.value}
+                                            checked={writingProvider === p.value}
+                                            onChange={() => { setWritingProvider(p.value); setWritingModel(DEFAULT_WRITING_MODELS[p.value]); }}
+                                            style={{ accentColor: "#f0c040" }} />
+                                        {p.label}
+                                    </label>
+                                ))}
                             </div>
-                            <div>
-                                <label style={labelStyle}>Gemini API Key</label>
-                                <div style={{ display: "flex", gap: 8 }}>
-                                    <input type="password" value={geminiKey} onChange={e => setGeminiKey(e.target.value)} placeholder="AI..." style={{ ...inputStyle, flex: 1 }} />
-                                    <button onClick={() => saveApiKey("gemini", geminiKey)} style={secondaryBtnStyle}>💾</button>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                                <div>
+                                    <label style={labelStyle}>Writing Model</label>
+                                    <select value={writingModel} onChange={e => setWritingModel(e.target.value)} style={selectStyle}>
+                                        {WRITING_MODELS_BY_PROVIDER[writingProvider].map(m => (
+                                            <option key={m.value} value={m.value}>{m.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style={labelStyle}>
+                                        {writingProvider === "google" ? "Gemini" : writingProvider === "claude" ? "Anthropic" : writingProvider === "openai" ? "OpenAI" : "Replicate"} API Key
+                                    </label>
+                                    <div style={{ display: "flex", gap: 8 }}>
+                                        {writingProvider === "google" && (
+                                            <><input type="password" value={geminiKey} onChange={e => setGeminiKey(e.target.value)} placeholder="AI..." style={{ ...inputStyle, flex: 1 }} />
+                                                <button onClick={() => saveApiKey("gemini", geminiKey)} style={secondaryBtnStyle}>💾</button></>
+                                        )}
+                                        {writingProvider === "claude" && (
+                                            <><input type="password" value={anthropicKey} onChange={e => setAnthropicKey(e.target.value)} placeholder="sk-ant-..." style={{ ...inputStyle, flex: 1 }} />
+                                                <button onClick={() => saveApiKey("anthropic", anthropicKey)} style={secondaryBtnStyle}>💾</button></>
+                                        )}
+                                        {writingProvider === "openai" && (
+                                            <><input type="password" value={openaiKey} onChange={e => setOpenaiKey(e.target.value)} placeholder="sk-..." style={{ ...inputStyle, flex: 1 }} />
+                                                <button onClick={() => saveApiKey("openai", openaiKey)} style={secondaryBtnStyle}>💾</button></>
+                                        )}
+                                        {writingProvider === "replicate" && (
+                                            <><input type="password" value={replicateKey} onChange={e => setReplicateKey(e.target.value)} placeholder="r8_..." style={{ ...inputStyle, flex: 1 }} />
+                                                <button onClick={() => saveApiKey("replicate", replicateKey)} style={secondaryBtnStyle}>💾</button></>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                            <div>
-                                <label style={labelStyle}>Replicate API Key</label>
-                                <div style={{ display: "flex", gap: 8 }}>
-                                    <input type="password" value={replicateKey} onChange={e => setReplicateKey(e.target.value)} placeholder="r8_..." style={{ ...inputStyle, flex: 1 }} />
-                                    <button onClick={() => saveApiKey("replicate", replicateKey)} style={secondaryBtnStyle}>💾</button>
+                        </div>
+
+                        <hr style={{ border: "none", borderTop: "1px solid #334155", margin: "16px 0" }} />
+
+                        {/* ── Image Provider ── */}
+                        <div style={{ marginBottom: 20 }}>
+                            <label style={{ ...labelStyle, fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>🖼️ Image Provider</label>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                                {IMAGE_PROVIDER_OPTIONS.map(p => (
+                                    <label key={p.value} style={{
+                                        display: "flex", alignItems: "center", gap: 6,
+                                        background: imageProvider === p.value ? "#1e3a5f" : "#1e2a3a",
+                                        border: `1px solid ${imageProvider === p.value ? "#f0c040" : "#334155"}`,
+                                        borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontSize: 13, color: "#e2e8f0",
+                                    }}>
+                                        <input type="radio" name="imageProvider" value={p.value}
+                                            checked={imageProvider === p.value}
+                                            onChange={() => { setImageProvider(p.value); setImageModel(DEFAULT_IMAGE_MODELS[p.value]); }}
+                                            style={{ accentColor: "#f0c040" }} />
+                                        {p.label}
+                                    </label>
+                                ))}
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                                <div>
+                                    <label style={labelStyle}>Image Model</label>
+                                    <select value={imageModel} onChange={e => setImageModel(e.target.value)} style={selectStyle}>
+                                        {IMAGE_MODELS_BY_PROVIDER[imageProvider].map(m => (
+                                            <option key={m.value} value={m.value}>{m.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    {/* Show image key field — shared if same provider as writing */}
+                                    {imageProvider === "google-imagen" && writingProvider !== "google" && (
+                                        <>
+                                            <label style={labelStyle}>Gemini API Key <span style={{ color: "#64748b", fontSize: 11 }}>(for Imagen)</span></label>
+                                            <div style={{ display: "flex", gap: 8 }}>
+                                                <input type="password" value={geminiKey} onChange={e => setGeminiKey(e.target.value)} placeholder="AI..." style={{ ...inputStyle, flex: 1 }} />
+                                                <button onClick={() => saveApiKey("gemini", geminiKey)} style={secondaryBtnStyle}>💾</button>
+                                            </div>
+                                        </>
+                                    )}
+                                    {imageProvider === "google-imagen" && writingProvider === "google" && (
+                                        <p style={{ color: "#64748b", fontSize: 12, margin: "8px 0 0 0" }}>✅ Using same Gemini key as writing</p>
+                                    )}
+                                    {imageProvider === "replicate" && writingProvider !== "replicate" && (
+                                        <>
+                                            <label style={labelStyle}>Replicate API Key</label>
+                                            <div style={{ display: "flex", gap: 8 }}>
+                                                <input type="password" value={replicateKey} onChange={e => setReplicateKey(e.target.value)} placeholder="r8_..." style={{ ...inputStyle, flex: 1 }} />
+                                                <button onClick={() => saveApiKey("replicate", replicateKey)} style={secondaryBtnStyle}>💾</button>
+                                            </div>
+                                        </>
+                                    )}
+                                    {imageProvider === "replicate" && writingProvider === "replicate" && (
+                                        <p style={{ color: "#64748b", fontSize: 12, margin: "8px 0 0 0" }}>✅ Using same Replicate key as writing</p>
+                                    )}
                                 </div>
                             </div>
-                            <div>
-                                <label style={labelStyle}>ImgBB API Key</label>
-                                <div style={{ display: "flex", gap: 8 }}>
-                                    <input type="password" value={imgbbKey} onChange={e => setImgbbKey(e.target.value)} placeholder="ImgBB key..." style={{ ...inputStyle, flex: 1 }} />
-                                    <button onClick={() => saveApiKey("imgbb", imgbbKey)} style={secondaryBtnStyle}>💾</button>
-                                </div>
+                        </div>
+
+                        <hr style={{ border: "none", borderTop: "1px solid #334155", margin: "16px 0" }} />
+
+                        {/* ── ImgBB ── */}
+                        <div>
+                            <label style={labelStyle}>ImgBB API Key <span style={{ color: "#64748b", fontSize: 11 }}>(permanent image hosting)</span></label>
+                            <div style={{ display: "flex", gap: 8 }}>
+                                <input type="password" value={imgbbKey} onChange={e => setImgbbKey(e.target.value)} placeholder="ImgBB key..." style={{ ...inputStyle, flex: 1 }} />
+                                <button onClick={() => saveApiKey("imgbb", imgbbKey)} style={secondaryBtnStyle}>💾</button>
                             </div>
                         </div>
                     </div>
@@ -955,7 +1118,9 @@ export default function BlogMonetizer() {
                                 replicateKey={replicateKey}
                                 imgbbKey={imgbbKey}
                                 imageSettings={settings.featuredImage}
-                                geminiModel={selectedModel}
+                                geminiModel={writingModel}
+                                imageProvider={imageProvider}
+                                imageModel={imageModel}
                                 onUpdate={updateArticle}
                             />
                         ))

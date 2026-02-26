@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { BlogArticle, WPCredentials, FeaturedImageSettings } from "./BlogMonetizer.types";
+import type { BlogArticle, WPCredentials, FeaturedImageSettings, ImageProvider } from "./BlogMonetizer.types";
 import { publishBlogToWPAction } from "@/app/actions/blog-monetizer/generate";
 import { generateFeaturedImageAction } from "@/app/actions/blog-monetizer/generate-image";
 
@@ -14,6 +14,8 @@ interface BlogMonetizerEditorProps {
     imgbbKey: string;
     imageSettings: FeaturedImageSettings;
     geminiModel: string;
+    imageProvider: ImageProvider;
+    imageModel: string;
     onUpdate: (index: number, updated: BlogArticle) => void;
 }
 
@@ -26,6 +28,8 @@ export default function BlogMonetizerEditor({
     imgbbKey,
     imageSettings,
     geminiModel,
+    imageProvider,
+    imageModel,
     onUpdate,
 }: BlogMonetizerEditorProps) {
     const [publishing, setPublishing] = useState(false);
@@ -59,7 +63,10 @@ export default function BlogMonetizerEditor({
 
     // ─── Regenerate Featured Image ───
     const handleRegenerateImage = async (promptOverride?: string) => {
-        if (!replicateKey) { alert("Replicate API key required."); return; }
+        const needsReplicateKey = imageProvider === "replicate";
+        const needsGeminiKey = imageProvider === "google-imagen";
+        if (needsReplicateKey && !replicateKey) { alert("Replicate API key required."); return; }
+        if (needsGeminiKey && !geminiKey) { alert("Gemini API key required for Google Imagen."); return; }
 
         setRegeneratingImage(true);
         const summary = article.content.replace(/<[^>]*>/g, " ").slice(0, 800);
@@ -74,7 +81,9 @@ export default function BlogMonetizerEditor({
             geminiKey,
             replicateKey,
             imgbbKey,
-            geminiModel
+            geminiModel,
+            imageProvider,
+            imageModel,
         );
 
         if (result.success && result.imageUrl) {
@@ -135,6 +144,11 @@ export default function BlogMonetizerEditor({
                         </h3>
                         <p style={{ color: "#94a3b8", fontSize: 13, margin: "4px 0 0 0" }}>
                             🔑 {article.keyword} · {article.wordCount || 0} words · {article.status.toUpperCase()}
+                            {article.imageError && (
+                                <span style={{ color: "#ef4444", marginLeft: 8, fontWeight: 600 }}>
+                                    ⚠️ Images failed — check API key
+                                </span>
+                            )}
                             {article.wpLink && (
                                 <a href={article.wpLink} target="_blank" rel="noopener" style={{ color: "#f0c040", marginLeft: 8 }}>View on WP →</a>
                             )}
@@ -304,7 +318,7 @@ export default function BlogMonetizerEditor({
                         overflowY: "auto",
                     }}>
                         <style>{`
-                            .bm-article-preview h1 { color: #ffffff; font-size: 28px; font-weight: 700; margin-bottom: 16px; line-height: 1.3; }
+                            .bm-article-preview h1 { color: #ffffff; font-size: 2rem; font-weight: 700; margin-bottom: 16px; line-height: 1.3; }
                             .bm-article-preview h2 { color: #f0c040; font-size: 22px; font-weight: 600; margin: 24px 0 12px 0; }
                             .bm-article-preview h3 { color: #e2e8f0; font-size: 18px; font-weight: 600; margin: 16px 0 8px 0; }
                             .bm-article-preview p { color: #e2e8f0; font-size: 15px; line-height: 1.7; margin-bottom: 12px; }
