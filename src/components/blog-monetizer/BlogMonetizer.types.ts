@@ -22,8 +22,10 @@ export type ImageProvider = 'google-imagen' | 'replicate';
 
 // ─── Writing Model Lists ───
 export const GEMINI_WRITING_MODELS = [
-    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro ★ Best Quality' },
-    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash ⚡ Recommended' },
+    { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro 🆕 Most Advanced' },
+    { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash ⚡ Frontier Performance' },
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro ★ Best Stable' },
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash ⭐ Recommended' },
     { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite 💰 Fastest' },
 ];
 export const CLAUDE_WRITING_MODELS = [
@@ -45,8 +47,11 @@ export const REPLICATE_WRITING_MODELS = [
 
 // ─── Image Model Lists ───
 export const GOOGLE_IMAGE_MODELS = [
-    { value: 'imagen-3.0-generate-002', label: 'Imagen 3 ★ Best Quality — $0.03/img' },
-    { value: 'imagen-3.0-fast-generate-001', label: 'Imagen 3 Fast ⚡ — $0.02/img' },
+    { value: 'imagen-4.0-generate-preview', label: 'Imagen 4 ★ Best Quality — 2K Resolution' },
+    { value: 'imagen-4.0-fast-generate-preview', label: 'Imagen 4 Fast ⚡ Speed Optimized' },
+    { value: 'gemini-3-pro-image-preview', label: 'Nano Banana Pro 🎨 4K Studio Quality' },
+    { value: 'gemini-3.1-flash-image-preview', label: 'Nano Banana 2 ⚡ High Volume Fast' },
+    { value: 'gemini-2.5-flash-image', label: 'Nano Banana Creative Workflows' },
 ];
 export const REPLICATE_IMAGE_MODELS = [
     { value: 'black-forest-labs/flux-2-pro', label: 'Flux 2 Pro ★ Best Quality — ~$0.05' },
@@ -70,7 +75,7 @@ export const DEFAULT_WRITING_MODELS: Record<WritingProvider, string> = {
     replicate: 'deepseek-ai/deepseek-v3',
 };
 export const DEFAULT_IMAGE_MODELS: Record<ImageProvider, string> = {
-    'google-imagen': 'imagen-3.0-generate-002',
+    'google-imagen': 'imagen-4.0-generate-preview',
     replicate: 'black-forest-labs/flux-1.1-pro',
 };
 

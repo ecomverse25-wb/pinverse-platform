@@ -5,7 +5,7 @@ import { GoogleGenAI } from "@google/genai";
 export async function generateImageWithGoogleImagen({
     prompt,
     geminiApiKey,
-    model = "imagen-3.0-generate-002",
+    model = "imagen-4.0-generate-preview",
     aspectRatio = "9:16",
     imgbbApiKey,
 }: {
@@ -20,33 +20,59 @@ export async function generateImageWithGoogleImagen({
         console.log("[Imagen] Aspect ratio:", aspectRatio);
         console.log("[Imagen] Prompt length:", prompt.length);
 
-        const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-        const response = await ai.models.generateImages({
-            model: model,
-            prompt: prompt,
-            config: {
-                numberOfImages: 1,
-                aspectRatio: aspectRatio as "1:1" | "9:16" | "16:9" | "4:3" | "3:4",
-                safetyFilterLevel: "BLOCK_ONLY_HIGH" as any,
-                personGeneration: "DONT_ALLOW" as any,
-            },
-        });
+        const isImagenModel = model.startsWith("imagen-");
+        const isGeminiImageModel = model.startsWith("gemini-");
+        let base64 = "";
 
-        console.log("[Imagen] Response received:", JSON.stringify(response));
+        if (isImagenModel) {
+            // Imagen API
+            const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+            const response = await ai.models.generateImages({
+                model: model,
+                prompt: prompt,
+                config: {
+                    numberOfImages: 1,
+                    aspectRatio: aspectRatio as "1:1" | "9:16" | "16:9" | "4:3" | "3:4",
+                    safetyFilterLevel: "BLOCK_ONLY_HIGH" as any,
+                    personGeneration: "DONT_ALLOW" as any,
+                },
+            });
 
-        const imageBytes = response.generatedImages?.[0]?.image?.imageBytes;
-        console.log("[Imagen] imageBytes present:", !!imageBytes);
-        console.log("[Imagen] imageBytes length:", imageBytes?.length);
-
-        if (!imageBytes) {
-            console.error("[Imagen] No imageBytes in response:", JSON.stringify(response));
-            return null;
+            console.log("[Imagen] Response received:", !!response);
+            const imageBytes = response.generatedImages?.[0]?.image?.imageBytes;
+            if (!imageBytes) {
+                console.error("[Imagen] No imageBytes in response:", JSON.stringify(response));
+                return null;
+            }
+            base64 = typeof imageBytes === "string" ? imageBytes : Buffer.from(imageBytes).toString("base64");
+        } else if (isGeminiImageModel) {
+            // Gemini native image generation
+            const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+            const response = await ai.models.generateContent({
+                model: model,
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                config: {
+                    responseModalities: ["IMAGE", "TEXT"],
+                    imageConfig: {
+                        aspectRatio: aspectRatio,
+                        numberOfImages: 1,
+                    } as any,
+                },
+            });
+            const parts = response.candidates?.[0]?.content?.parts ?? [];
+            for (const part of parts) {
+                if (part.inlineData?.mimeType?.startsWith("image/") && part.inlineData?.data) {
+                    base64 = part.inlineData.data;
+                    break;
+                }
+            }
+            if (!base64) {
+                console.error("[Imagen] No image data in Gemini content response.");
+                return null;
+            }
         }
 
-        // imageBytes is already a base64 string
-        const base64 = typeof imageBytes === "string"
-            ? imageBytes
-            : Buffer.from(imageBytes).toString("base64");
+        if (!base64) return null;
 
         // Upload to ImgBB if key provided
         if (imgbbApiKey) {
