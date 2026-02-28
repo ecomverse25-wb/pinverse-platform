@@ -773,6 +773,13 @@ export default function BlogMonetizer() {
                                             <p style={{ color: "#ef4444", fontSize: 13, margin: 0, fontWeight: 600 }}>❌ Failed: {testImageResult.error}</p>
                                         </div>
                                     )}
+                                    {imageProvider === 'google-imagen' && (
+                                        <div style={{ marginTop: 8, padding: 8, background: "#3b82f61a", border: "1px solid #3b82f640", borderRadius: 8 }}>
+                                            <p style={{ color: "#94a3b8", fontSize: 12, margin: 0 }}>
+                                                ℹ️ Imagen 4 is not yet available via standard Gemini API keys. Using Google&apos;s native Gemini image models which are fully supported and produce excellent results.
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     {/* Show image key field — shared if same provider as writing */}

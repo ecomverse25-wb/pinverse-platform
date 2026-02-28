@@ -397,7 +397,7 @@ export async function testImageProviderAction(
             const imageUrl = await generateImageWithGoogleImagen({
                 prompt,
                 geminiApiKey: geminiKey,
-                model: model || "imagen-4.0-generate-preview",
+                model: model || "gemini-2.5-flash-image",
                 aspectRatio: "1:1"
             });
             if (!imageUrl) {

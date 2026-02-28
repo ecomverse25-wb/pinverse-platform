@@ -5,7 +5,7 @@ import { GoogleGenAI } from "@google/genai";
 export async function generateImageWithGoogleImagen({
     prompt,
     geminiApiKey,
-    model = "imagen-4.0-generate-preview",
+    model = "gemini-2.5-flash-image",
     aspectRatio = "9:16",
     imgbbApiKey,
 }: {
@@ -20,79 +20,51 @@ export async function generateImageWithGoogleImagen({
         console.log("[Imagen] Aspect ratio:", aspectRatio);
         console.log("[Imagen] Prompt length:", prompt.length);
 
-        const isImagenModel = model.startsWith("imagen-");
-        const isGeminiImageModel = model.startsWith("gemini-");
-        let base64 = "";
+        const ai = new GoogleGenAI({ apiKey: geminiApiKey });
 
-        if (isImagenModel) {
-            // Imagen API
-            const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-            const response = await ai.models.generateImages({
-                model: model,
-                prompt: prompt,
-                config: {
-                    numberOfImages: 1,
-                    aspectRatio: aspectRatio as "1:1" | "9:16" | "16:9" | "4:3" | "3:4",
-                    safetyFilterLevel: "BLOCK_ONLY_HIGH" as any,
-                    personGeneration: "DONT_ALLOW" as any,
-                },
-            });
+        // All 3 models use generateContent with IMAGE responseModality
+        const response = await ai.models.generateContent({
+            model,
+            contents: [{
+                role: "user",
+                parts: [{
+                    text: `Generate a high quality image: ${prompt}. Aspect ratio: ${aspectRatio}. No text, no watermarks, no people. Pinterest-worthy, portrait orientation.`
+                }]
+            }],
+            config: {
+                responseModalities: ["IMAGE", "TEXT"],
+            },
+        });
 
-            console.log("[Imagen] Response received:", !!response);
-            const imageBytes = response.generatedImages?.[0]?.image?.imageBytes;
-            if (!imageBytes) {
-                console.error("[Imagen] No imageBytes in response:", JSON.stringify(response));
-                return null;
-            }
-            base64 = typeof imageBytes === "string" ? imageBytes : Buffer.from(imageBytes).toString("base64");
-        } else if (isGeminiImageModel) {
-            // Gemini native image generation
-            const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-            const response = await ai.models.generateContent({
-                model: model,
-                contents: [{ role: "user", parts: [{ text: prompt }] }],
-                config: {
-                    responseModalities: ["IMAGE", "TEXT"],
-                    imageConfig: {
-                        aspectRatio: aspectRatio,
-                        numberOfImages: 1,
-                    } as any,
-                },
-            });
-            const parts = response.candidates?.[0]?.content?.parts ?? [];
-            for (const part of parts) {
-                if (part.inlineData?.mimeType?.startsWith("image/") && part.inlineData?.data) {
-                    base64 = part.inlineData.data;
-                    break;
+        // Extract image from response parts
+        const parts = response.candidates?.[0]?.content?.parts ?? [];
+        for (const part of parts) {
+            if (part.inlineData?.mimeType?.startsWith("image/")) {
+                const base64 = part.inlineData.data;
+                if (!base64) continue;
+
+                // Upload to ImgBB if key provided
+                if (imgbbApiKey) {
+                    try {
+                        const formData = new FormData();
+                        formData.append("image", base64);
+                        const res = await fetch(
+                            `https://api.imgbb.com/1/upload?key=${imgbbApiKey}`,
+                            { method: "POST", body: formData }
+                        );
+                        const data = await res.json();
+                        if (data.data?.url) return data.data.url;
+                    } catch (imgbbError) {
+                        console.error("[Imagen] ImgBB upload failed:", imgbbError);
+                        // fall through to base64
+                    }
                 }
-            }
-            if (!base64) {
-                console.error("[Imagen] No image data in Gemini content response.");
-                return null;
+                return `data:${part.inlineData.mimeType};base64,${base64}`;
             }
         }
 
-        if (!base64) return null;
-
-        // Upload to ImgBB if key provided
-        if (imgbbApiKey) {
-            try {
-                const formData = new FormData();
-                formData.append("image", base64);
-                const res = await fetch(
-                    `https://api.imgbb.com/1/upload?key=${imgbbApiKey}`,
-                    { method: "POST", body: formData }
-                );
-                const data = await res.json();
-                if (data.data?.url) return data.data.url;
-            } catch (imgbbError) {
-                console.error("[Imagen] ImgBB upload failed:", imgbbError);
-                // Fall through to return data URL
-            }
-        }
-
-        // Return as data URL if no ImgBB or ImgBB failed
-        return `data:image/png;base64,${base64}`;
+        console.error("[Imagen] No image data in Gemini content response.");
+        return null;
     } catch (error: unknown) {
         console.error("[Imagen] FULL ERROR:", error);
         console.error("[Imagen] Error message:", error instanceof Error ? error.message : String(error));
