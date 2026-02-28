@@ -107,6 +107,16 @@ async function generateTextWithProvider(prompt: string, config: ProviderConfig):
 
 // ─── Generate Bulk Titles (one API call) ───
 
+function sanitizeArticleTitle(title: string): string {
+    // Remove any year pattern (4 digit years 2020-2035)
+    return title.replace(/\b(202[0-9]|203[0-5])\b/g, "").trim()
+        // Clean up any double spaces left after year removal
+        .replace(/\s+/g, " ")
+        // Clean up trailing punctuation artifacts
+        .replace(/[,\s]+$/, "")
+        .trim();
+}
+
 export async function generateBulkTitlesAction(
     keywords: string[],
     tone: Tone,
@@ -131,6 +141,30 @@ Rules:
 - Match tone: ${tone}
 - Match niche: ${niche}
 
+STRICT TITLE RULES:
+✅ DO: Start with the main keyword or a number
+✅ DO: Use power words: Best, Essential, Genius, Ultimate, Proven, Simple, Complete, Perfect, Easy, Smart
+✅ DO: Include a benefit or promise in the title
+✅ DO: Keep it 50-70 characters
+
+❌ DO NOT: Include any year numbers (2024, 2025, 2026, etc.)
+❌ DO NOT: Use the keyword alone as the full title
+❌ DO NOT: Use clickbait or exaggerated claims
+❌ DO NOT: Start with "The" every time — vary the structure
+
+GOOD title examples:
+  "7 Best Wood Kitchenware Pieces Every Home Cook Needs"
+  "Wood Kitchenware: The Complete Buyer's Guide"
+  "How to Choose Wood Kitchenware That Lasts a Lifetime"
+  "5 Reasons Wood Kitchenware Beats Plastic Every Time"
+  "Wood Kitchenware Essentials for a Better Kitchen"
+
+BAD title examples (never generate these):
+  "Wood Kitchenware" ← raw keyword only
+  "Best Wood Kitchenware in 2026" ← contains year
+  "Top Wood Kitchenware Products 2025" ← contains year
+  "Wood Kitchenware Guide 2026" ← contains year
+
 Keywords:
 ${keywordsList}
 
@@ -151,7 +185,11 @@ Return JSON array only, no markdown, no code fences:
         const text = await generateTextWithProvider(prompt, config);
         const cleaned = text.replace(/```json\s*/gi, "").replace(/```/g, "").trim();
         const parsed = JSON.parse(cleaned);
-        return { success: true, titles: parsed };
+        const sanitizedTitles = parsed.map((item: any) => ({
+            ...item,
+            title: sanitizeArticleTitle(item.title)
+        }));
+        return { success: true, titles: sanitizedTitles };
     } catch (error: unknown) {
         console.error("Bulk title generation error:", error);
         const msg = error instanceof Error ? error.message : "Unknown error";
