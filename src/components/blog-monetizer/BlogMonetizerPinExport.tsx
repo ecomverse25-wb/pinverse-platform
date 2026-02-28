@@ -27,7 +27,22 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl }: BlogMone
         }
 
         // Section image pins
+        const FAQ_HEADINGS = [
+            "frequently asked questions",
+            "faq", "f.a.q",
+            "common questions",
+            "questions and answers",
+            "q&a", "q & a",
+            "people also ask",
+            "questions about",
+        ];
+
         for (const img of article.sectionImages) {
+            const headingLower = img.h2Title.toLowerCase().trim();
+            const isFAQ = img.isFAQ || FAQ_HEADINGS.some(f => headingLower.includes(f));
+
+            if (isFAQ) continue;
+
             pins.push({
                 imageUrl: img.imageUrl,
                 title: img.h2Title.slice(0, 100),
@@ -57,7 +72,22 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl }: BlogMone
                     type: "featured",
                 });
             }
+            const FAQ_HEADINGS = [
+                "frequently asked questions",
+                "faq", "f.a.q",
+                "common questions",
+                "questions and answers",
+                "q&a", "q & a",
+                "people also ask",
+                "questions about",
+            ];
+
             for (const img of article.sectionImages) {
+                const headingLower = img.h2Title.toLowerCase().trim();
+                const isFAQ = img.isFAQ || FAQ_HEADINGS.some(f => headingLower.includes(f));
+
+                if (isFAQ) continue;
+
                 newPins.push({
                     imageUrl: img.imageUrl,
                     title: img.h2Title.slice(0, 100),

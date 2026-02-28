@@ -241,15 +241,31 @@ export async function generateBlogArticleAction(
     anthropicApiKey?: string,
     openaiApiKey?: string,
     replicateApiKey?: string
-): Promise<{ success?: boolean; content?: string; metaDescription?: string; wordCount?: number; error?: string }> {
+): Promise<{ success?: boolean; content?: string; title?: string; metaDescription?: string; wordCount?: number; error?: string }> {
     const wordTarget = WORD_TARGETS[articleLength];
 
-    const prompt = `Write a complete blog article with the following specifications:
+    const prompt = `You are an expert SEO blog writer.
 
-TITLE: ${title}
-TARGET KEYWORD: ${keyword}
-NICHE: ${niche}
-TONE: ${tone}
+STEP 1 - TITLE: First, generate a compelling SEO title.
+Output it on the very first line in this exact format:
+##TITLE##Your SEO Title Here##TITLE##
+
+Title rules:
+- 50-70 characters
+- Contains keyword "${keyword}" naturally  
+- NOT just the keyword alone
+- NO years (2024/2025/2026 etc.)
+- Use formats: "X Best...", "How to...", "The Complete Guide to...", 
+  "X Reasons...", "X Ways..."
+
+STEP 2 - ARTICLE: Then write the full article.
+Start the article body with <h1>Your SEO Title Here</h1>
+(use the SAME title from STEP 1)
+
+Keyword: ${keyword}
+Niche: ${niche}
+Tone: ${tone}
+Length: ${articleLength}
 WORD COUNT TARGET: ~${wordTarget} words
 NUMBER OF H2 SECTIONS: ${h2Count}
 
@@ -267,7 +283,7 @@ Rules:
 - Natural keyword density 1.5–2.5%, never forced
 
 REQUIRED STRUCTURE:
-1. Start with <h1>${title}</h1>
+1. Start with <h1>Your SEO Title Here</h1>
 2. Opening paragraph (~100 words) — engaging, immediately useful
 3. Exactly ${h2Count} H2 sections with varied engaging subheadings using <h2> tags
 4. After every 2 H2 sections, insert this exact HTML comment on its own line:
@@ -305,10 +321,34 @@ Do NOT wrap in code fences. Do NOT include <html>, <head>, or <body> tags. Just 
             text = text.replace(/META_DESCRIPTION:\s*.+/i, "").trim();
         }
 
-        // Count words
-        const wordCount = text.replace(/<[^>]*>/g, " ").split(/\s+/).filter(Boolean).length;
+        let articleTitle = keyword; // default fallback
+        let articleContent = text;
 
-        return { success: true, content: text, metaDescription, wordCount };
+        // Extract title from ##TITLE## markers
+        const titleMatch = text.match(/##TITLE##(.+?)##TITLE##/);
+        if (titleMatch) {
+            articleTitle = titleMatch[1]
+                .trim()
+                .replace(/\b(202[0-9]|203[0-5])\b/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            // Remove the ##TITLE## line from article content
+            articleContent = text
+                .replace(/##TITLE##.+?##TITLE##\n?/, '')
+                .trim();
+        }
+
+        // Final validation — if title === keyword, force generate one
+        if (articleTitle.toLowerCase() === keyword.toLowerCase()) {
+            articleTitle = `The Complete Guide to ${keyword}`;
+        }
+
+        console.log(`[TITLE] Extracted SEO title: "${articleTitle}" for keyword: "${keyword}"`);
+
+        // Count words
+        const wordCount = articleContent.replace(/<[^>]*>/g, " ").split(/\s+/).filter(Boolean).length;
+
+        return { success: true, content: articleContent, title: articleTitle, metaDescription, wordCount };
     } catch (error: unknown) {
         console.error("Article generation error:", error);
         const msg = error instanceof Error ? error.message : "Unknown error";

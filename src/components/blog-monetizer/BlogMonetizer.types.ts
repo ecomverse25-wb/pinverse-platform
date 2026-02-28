@@ -121,6 +121,7 @@ export interface SectionImage {
     h2Title: string;
     imageUrl: string;
     prompt?: string;
+    isFAQ?: boolean;
 }
 
 export interface BlogArticle {

@@ -149,8 +149,26 @@ export default function BlogMonetizerEditor({
         }
 
         // H2 section images
+        const FAQ_HEADINGS = [
+            "frequently asked questions",
+            "faq", "f.a.q",
+            "common questions",
+            "questions and answers",
+            "q&a", "q & a",
+            "people also ask",
+            "questions about",
+        ];
+
         for (let j = 0; j < h2Headings.length; j++) {
             try {
+                const headingLower = h2Headings[j].toLowerCase().trim();
+                const isFAQ = FAQ_HEADINGS.some(f => headingLower.includes(f));
+
+                if (isFAQ) {
+                    newSectionImages.push({ h2Index: j, h2Title: h2Headings[j], imageUrl: "", isFAQ: true });
+                    continue; // Skip API call
+                }
+
                 const secResult = await generateH2ImageAction(
                     h2Headings[j], "blog", replicateKey, imgbbKey,
                     imageProvider, imageModel, geminiKey,
@@ -215,7 +233,7 @@ export default function BlogMonetizerEditor({
                     }} />
                     <div style={{ minWidth: 0 }}>
                         <h3 style={{ color: "#e2e8f0", fontSize: 16, fontWeight: 600, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {article.title || article.keyword}
+                            {article.title ?? article.keyword}
                         </h3>
                         <p style={{ color: "#94a3b8", fontSize: 13, margin: "4px 0 0 0" }}>
                             🔑 {article.keyword} · {article.wordCount || 0} words · {article.status.toUpperCase()}
@@ -402,11 +420,11 @@ export default function BlogMonetizerEditor({
                     )}
 
                     {/* Section Images Grid */}
-                    {article.sectionImages.length > 0 && (
+                    {article.sectionImages.filter(img => !img.isFAQ && img.imageUrl).length > 0 && (
                         <div style={{ marginBottom: 20 }}>
                             <h4 style={{ color: "#f0c040", marginBottom: 8, fontSize: 14, fontWeight: 600 }}>🖼️ Section Images</h4>
                             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
-                                {article.sectionImages.map((img, i) => (
+                                {article.sectionImages.filter(img => !img.isFAQ && img.imageUrl).map((img, i) => (
                                     <div key={i} style={{ position: "relative", borderRadius: 12, overflow: "hidden" }}>
                                         <img
                                             src={img.imageUrl}

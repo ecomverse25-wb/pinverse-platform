@@ -137,6 +137,19 @@ export default function BlogMonetizer() {
         return links.map(a => `${a.productName} | ${a.url}`).join("\n");
     });
 
+    // ─── Session Cache Clearing ───
+    const SESSION_VERSION = "v4"; // was v3, now v4
+    useEffect(() => {
+        const savedVersion = localStorage.getItem("bm-session-version");
+        if (savedVersion !== SESSION_VERSION) {
+            localStorage.removeItem("blog-monetizer-session"); // old direct backup
+            localStorage.removeItem("bm_articles"); // actual key used for articles if it was persisted
+            localStorage.setItem("bm-session-version", SESSION_VERSION);
+            setArticles([]); // clear stale items
+            console.log(`[SESSION] Cache cleared — version bumped to ${SESSION_VERSION}`);
+        }
+    }, []);
+
     // ─── Load API Keys from DB ───
     useEffect(() => {
         (async () => {
@@ -388,11 +401,13 @@ export default function BlogMonetizer() {
 
                 let finalContent = artResult.content;
 
-                // Extract AI-generated title from the H1 tag in the content
-                let generatedTitle = item.title;
-                const h1Match = finalContent.match(/<h1[^>]*>(.*?)<\/h1>/i);
-                if (h1Match) {
-                    generatedTitle = h1Match[1].replace(/<[^>]*>/g, "").trim();
+                // Use the returned title or default back to H1 extraction
+                let generatedTitle = artResult.title || item.title;
+                if (!artResult.title) {
+                    const h1Match = finalContent.match(/<h1[^>]*>(.*?)<\/h1>/i);
+                    if (h1Match) {
+                        generatedTitle = h1Match[1].replace(/<[^>]*>/g, "").trim();
+                    }
                 }
 
                 // Step 2: Inject affiliate links
@@ -456,7 +471,31 @@ export default function BlogMonetizer() {
                     }
 
                     // H2 section images — generate sequentially with progress
+                    const FAQ_HEADINGS = [
+                        "frequently asked questions",
+                        "faq", "f.a.q",
+                        "common questions",
+                        "questions and answers",
+                        "q&a", "q & a",
+                        "people also ask",
+                        "questions about",
+                    ];
+
                     for (let j = 0; j < h2Headings.length; j++) {
+                        const headingLower = h2Headings[j].toLowerCase().trim();
+                        const isFAQ = FAQ_HEADINGS.some(f => headingLower.includes(f));
+
+                        if (isFAQ) {
+                            console.log(`[FAQ SKIP] Skipping image generation for FAQ section: "${h2Headings[j]}"`);
+                            sectionImages.push({
+                                h2Index: j,
+                                h2Title: h2Headings[j],
+                                imageUrl: "",
+                                isFAQ: true,
+                            });
+                            continue; // Skip API call
+                        }
+
                         setStatusMessage(`🎨 Generating section images: ${j + 1}/${h2Headings.length} — "${item.keyword}"`);
                         try {
                             const secResult = await generateH2ImageAction(
@@ -489,6 +528,10 @@ export default function BlogMonetizer() {
                         finalContent = finalContent.replace(h2CloseRegex, (match) => {
                             if (count === img.h2Index) {
                                 count++;
+
+                                // Skip injection if FAQ or no real image
+                                if (!img.imageUrl || img.isFAQ) return match;
+
                                 return `${match}
 <div style="margin:12px 0;position:relative;">
   <img src="${img.imageUrl}" alt="${img.h2Title}" style="width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:12px;" />
