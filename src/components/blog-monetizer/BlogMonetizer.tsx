@@ -1122,6 +1122,7 @@ export default function BlogMonetizer() {
                                 imageProvider={imageProvider}
                                 imageModel={imageModel}
                                 onUpdate={updateArticle}
+                                onSwitchToSetup={() => setActiveTab("setup")}
                             />
                         ))
                     )}

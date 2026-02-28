@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import type { BlogArticle, WPCredentials, FeaturedImageSettings, ImageProvider } from "./BlogMonetizer.types";
+import type { BlogArticle, WPCredentials, FeaturedImageSettings, ImageProvider, ImageDimensions, SectionImage } from "./BlogMonetizer.types";
 import { publishBlogToWPAction } from "@/app/actions/blog-monetizer/generate";
-import { generateFeaturedImageAction } from "@/app/actions/blog-monetizer/generate-image";
+import { generateFeaturedImageAction, generateH2ImageAction } from "@/app/actions/blog-monetizer/generate-image";
 
 interface BlogMonetizerEditorProps {
     article: BlogArticle;
@@ -17,6 +17,7 @@ interface BlogMonetizerEditorProps {
     imageProvider: ImageProvider;
     imageModel: string;
     onUpdate: (index: number, updated: BlogArticle) => void;
+    onSwitchToSetup: () => void;
 }
 
 export default function BlogMonetizerEditor({
@@ -31,9 +32,11 @@ export default function BlogMonetizerEditor({
     imageProvider,
     imageModel,
     onUpdate,
+    onSwitchToSetup,
 }: BlogMonetizerEditorProps) {
     const [publishing, setPublishing] = useState(false);
     const [regeneratingImage, setRegeneratingImage] = useState(false);
+    const [regeneratingAllImages, setRegeneratingAllImages] = useState(false);
     const [editingPrompt, setEditingPrompt] = useState(false);
     const [customPrompt, setCustomPrompt] = useState(article.featuredImagePrompt || "");
     const [expanded, setExpanded] = useState(false);
@@ -99,6 +102,71 @@ export default function BlogMonetizerEditor({
         setRegeneratingImage(false);
     };
 
+    // ─── Regenerate Images Only (no article text regen) ───
+    const handleRegenerateImagesOnly = async () => {
+        setRegeneratingAllImages(true);
+
+        const content = article.content;
+        const h2Regex = /<h2[^>]*>(.*?)<\/h2>/gi;
+        const h2Headings: string[] = [];
+        let h2Match;
+        while ((h2Match = h2Regex.exec(content)) !== null) {
+            h2Headings.push(h2Match[1].replace(/<[^>]*>/g, ""));
+        }
+
+        let newFeaturedUrl = article.featuredImageUrl;
+        let newFeaturedPrompt = article.featuredImagePrompt;
+        let newImageError: string | undefined;
+        const newSectionImages: SectionImage[] = [];
+
+        // Featured image
+        try {
+            const summary = content.replace(/<[^>]*>/g, " ").slice(0, 800);
+            const featResult = await generateFeaturedImageAction(
+                article.title, summary,
+                imageSettings.promptTemplate,
+                imageSettings.style,
+                imageSettings.colorMood,
+                imageSettings.dimensions,
+                geminiKey, replicateKey, imgbbKey, geminiModel,
+                imageProvider, imageModel,
+            );
+            if (featResult.success && featResult.imageUrl) {
+                newFeaturedUrl = featResult.imageUrl;
+                newFeaturedPrompt = featResult.prompt;
+            } else {
+                newImageError = featResult.error || "Featured image failed";
+            }
+        } catch (err) {
+            newImageError = err instanceof Error ? err.message : "Featured image error";
+        }
+
+        // H2 section images
+        for (let j = 0; j < h2Headings.length; j++) {
+            try {
+                const secResult = await generateH2ImageAction(
+                    h2Headings[j], "blog", replicateKey, imgbbKey,
+                    imageProvider, imageModel, geminiKey,
+                    imageSettings.dimensions,
+                );
+                if (secResult.success && secResult.imageUrl) {
+                    newSectionImages.push({ h2Index: j, h2Title: h2Headings[j], imageUrl: secResult.imageUrl });
+                }
+            } catch (err) {
+                console.error(`Section image ${j} regen failed:`, err);
+            }
+        }
+
+        onUpdate(index, {
+            ...article,
+            featuredImageUrl: newFeaturedUrl,
+            featuredImagePrompt: newFeaturedPrompt,
+            sectionImages: newSectionImages.length > 0 ? newSectionImages : article.sectionImages,
+            imageError: newImageError,
+        });
+        setRegeneratingAllImages(false);
+    };
+
     // ─── Copy Meta Description ───
     const copyMeta = () => {
         navigator.clipboard.writeText(article.metaDescription);
@@ -145,9 +213,21 @@ export default function BlogMonetizerEditor({
                         <p style={{ color: "#94a3b8", fontSize: 13, margin: "4px 0 0 0" }}>
                             🔑 {article.keyword} · {article.wordCount || 0} words · {article.status.toUpperCase()}
                             {article.imageError && (
-                                <span style={{ color: "#ef4444", marginLeft: 8, fontWeight: 600 }}>
-                                    ⚠️ Images failed — check API key
+                                <span style={{ color: "#ef4444", marginLeft: 8, fontWeight: 600, fontSize: 12 }}>
+                                    {article.imageError.length > 80 ? article.imageError.slice(0, 80) + "…" : article.imageError}
                                 </span>
+                            )}
+                            {article.imageError && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onSwitchToSetup(); }}
+                                    style={{
+                                        marginLeft: 8, background: "#1e2a3a", border: "1px solid #475569",
+                                        borderRadius: 6, color: "#f0c040", padding: "2px 8px",
+                                        fontSize: 11, fontWeight: 600, cursor: "pointer",
+                                    }}
+                                >
+                                    🔄 Switch Provider
+                                </button>
                             )}
                             {article.wpLink && (
                                 <a href={article.wpLink} target="_blank" rel="noopener" style={{ color: "#f0c040", marginLeft: 8 }}>View on WP →</a>
@@ -181,7 +261,30 @@ export default function BlogMonetizerEditor({
             {/* Expanded Content */}
             {expanded && (
                 <div style={{ padding: 20 }}>
-                    {/* Meta Description */}
+                    {/* Image Error Banner + Retry */}
+                    {article.imageError && (
+                        <div style={{
+                            background: "#2a1a1a", border: "1px solid #7f1d1d", borderRadius: 8,
+                            padding: 12, marginBottom: 16, display: "flex", alignItems: "center",
+                            justifyContent: "space-between", gap: 12, flexWrap: "wrap",
+                        }}>
+                            <p style={{ color: "#fca5a5", fontSize: 13, margin: 0, flex: 1, minWidth: 200 }}>
+                                {article.imageError}
+                            </p>
+                            <button
+                                onClick={handleRegenerateImagesOnly}
+                                disabled={regeneratingAllImages}
+                                style={{
+                                    background: "#f0c040", color: "#0f1623", border: "none",
+                                    borderRadius: 8, padding: "8px 16px", fontWeight: 600,
+                                    fontSize: 13, cursor: regeneratingAllImages ? "not-allowed" : "pointer",
+                                    flexShrink: 0,
+                                }}
+                            >
+                                {regeneratingAllImages ? "⏳ Regenerating..." : "🖼️ Regenerate Images Only"}
+                            </button>
+                        </div>
+                    )}
                     {article.metaDescription && (
                         <div style={{
                             background: "#0f1623",
