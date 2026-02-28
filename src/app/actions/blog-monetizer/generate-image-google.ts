@@ -27,15 +27,16 @@ export async function generateImageWithGoogleImagen({
             config: {
                 numberOfImages: 1,
                 aspectRatio: aspectRatio as "1:1" | "9:16" | "16:9" | "4:3" | "3:4",
-                safetyFilterLevel: "BLOCK_ONLY_HIGH",
-                personGeneration: "DONT_ALLOW",
+                safetyFilterLevel: "BLOCK_ONLY_HIGH" as any,
+                personGeneration: "DONT_ALLOW" as any,
             },
         });
 
-        console.log("[Imagen] Response received");
+        console.log("[Imagen] Response received:", JSON.stringify(response));
 
         const imageBytes = response.generatedImages?.[0]?.image?.imageBytes;
         console.log("[Imagen] imageBytes present:", !!imageBytes);
+        console.log("[Imagen] imageBytes length:", imageBytes?.length);
 
         if (!imageBytes) {
             console.error("[Imagen] No imageBytes in response:", JSON.stringify(response));
@@ -87,5 +88,5 @@ function formatImagenError(msg: string): string {
     if (lower.includes("api_key_invalid") || lower.includes("invalid api key")) {
         return "⚠️ Invalid Gemini API key. Please check your key in Setup.";
     }
-    return `⚠️ Image generation failed: ${msg}`;
+    return msg; // Instead of "Image generation failed: ${msg}", let's return raw msg so user can see it
 }

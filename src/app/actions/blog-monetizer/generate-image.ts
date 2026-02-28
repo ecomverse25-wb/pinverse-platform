@@ -268,8 +268,24 @@ export async function generateFeaturedImageAction(
             }
             return { success: true, imageUrl, prompt: finalPrompt };
         } catch (error: unknown) {
-            const msg = error instanceof Error ? error.message : "Google Imagen error";
-            return { error: msg };
+            console.warn("[Imagen] Primary prompt failed, trying fallback");
+            try {
+                // Use a simpler, safer fallback prompt
+                const fallbackImageUrl = await generateImageWithGoogleImagen({
+                    prompt: `Professional lifestyle photography, ${title}, clean aesthetic, bright natural lighting, no people, Pinterest style`,
+                    geminiApiKey: geminiKey,
+                    model,
+                    aspectRatio: imagenAR,
+                    imgbbApiKey: imgbbKey || undefined,
+                });
+                if (!fallbackImageUrl) {
+                    return { error: "Google Imagen returned no image for fallback prompt." };
+                }
+                return { success: true, imageUrl: fallbackImageUrl, prompt: "Fallback: " + title };
+            } catch (fallbackError: unknown) {
+                const msg = fallbackError instanceof Error ? fallbackError.message : "Google Imagen error";
+                return { error: msg };
+            }
         }
     } else {
         // Replicate
@@ -326,8 +342,23 @@ export async function generateH2ImageAction(
             }
             return { success: true, imageUrl };
         } catch (error: unknown) {
-            const msg = error instanceof Error ? error.message : "Google Imagen section error";
-            return { error: msg };
+            console.warn("[Imagen] Primary prompt failed, trying fallback");
+            try {
+                const fallbackImageUrl = await generateImageWithGoogleImagen({
+                    prompt: `Professional lifestyle photography, ${h2Topic}, clean aesthetic, bright natural lighting, no people, Pinterest style`,
+                    geminiApiKey: geminiKey,
+                    model,
+                    aspectRatio: imagenAR,
+                    imgbbApiKey: imgbbKey || undefined,
+                });
+                if (!fallbackImageUrl) {
+                    return { error: "Google Imagen returned no image for fallback section prompt." };
+                }
+                return { success: true, imageUrl: fallbackImageUrl };
+            } catch (fallbackError: unknown) {
+                const msg = fallbackError instanceof Error ? fallbackError.message : "Google Imagen section error";
+                return { error: msg };
+            }
         }
     } else {
         // Replicate
@@ -347,5 +378,38 @@ export async function generateH2ImageAction(
         }
 
         return { success: true, imageUrl: result.imageUrl };
+    }
+}
+
+// ─── Test Image API ───
+
+export async function testImageProviderAction(
+    provider: ImageProvider,
+    model: string,
+    geminiKey: string,
+    replicateKey: string
+): Promise<{ success: boolean; imageUrl?: string; error?: string }> {
+    const prompt = "A red apple on a white table";
+
+    if (provider === "google-imagen") {
+        if (!geminiKey) return { success: false, error: "Gemini API key is required." };
+        try {
+            const imageUrl = await generateImageWithGoogleImagen({
+                prompt,
+                geminiApiKey: geminiKey,
+                model,
+                aspectRatio: "1:1"
+            });
+            if (!imageUrl) {
+                return { success: false, error: "Google Imagen returned no image." };
+            }
+            return { success: true, imageUrl };
+        } catch (error: unknown) {
+            return { success: false, error: error instanceof Error ? error.message : "Google Imagen error" };
+        }
+    } else {
+        if (!replicateKey) return { success: false, error: "Replicate API key is required." };
+        const result = await generateImageViaReplicate(prompt, replicateKey, "1:1", model);
+        return { success: result.success, imageUrl: result.imageUrl, error: result.error };
     }
 }

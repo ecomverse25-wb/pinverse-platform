@@ -20,7 +20,7 @@ import {
     publishBlogToWPAction,
 } from "@/app/actions/blog-monetizer/generate";
 import {
-    generateFeaturedImageAction, generateH2ImageAction,
+    generateFeaturedImageAction, generateH2ImageAction, testImageProviderAction
 } from "@/app/actions/blog-monetizer/generate-image";
 import BlogMonetizerEditor from "./BlogMonetizerEditor";
 import BlogMonetizerPinExport from "./BlogMonetizerPinExport";
@@ -127,6 +127,9 @@ export default function BlogMonetizer() {
 
     // ─── Image settings collapsed ───
     const [imageSettingsOpen, setImageSettingsOpen] = useState(false);
+
+    // ─── Test API State ───
+    const [testImageResult, setTestImageResult] = useState<{ status: 'idle' | 'testing' | 'success' | 'error', url?: string, error?: string }>({ status: 'idle' });
 
     // Affiliates textarea
     const [affiliatesText, setAffiliatesText] = useState(() => {
@@ -423,6 +426,13 @@ export default function BlogMonetizer() {
                     // Featured image
                     setStatusMessage(`🖼️ Generating featured image: "${item.keyword}"`);
                     try {
+                        if (imageProvider === "google-imagen" && (!geminiKey || geminiKey.trim() === "")) {
+                            throw new Error("Gemini API key is missing. Please add it in Setup.");
+                        }
+                        if (imageProvider === "replicate" && (!replicateKey || replicateKey.trim() === "")) {
+                            throw new Error("Replicate API key is missing. Please add it in Setup.");
+                        }
+
                         const summary = finalContent.replace(/<[^>]*>/g, " ").slice(0, 800);
                         const featResult = await generateFeaturedImageAction(
                             generatedTitle, summary,
@@ -557,6 +567,17 @@ export default function BlogMonetizer() {
             await new Promise(r => setTimeout(r, 1000));
         }
         setStatusMessage("✅ All articles published to WordPress!");
+    };
+
+    // ─── Test Image API ───
+    const handleTestImageApi = async () => {
+        setTestImageResult({ status: 'testing' });
+        const result = await testImageProviderAction(imageProvider, imageModel, geminiKey, replicateKey);
+        if (result.success && result.imageUrl) {
+            setTestImageResult({ status: 'success', url: result.imageUrl });
+        } else {
+            setTestImageResult({ status: 'error', error: result.error || "Unknown error" });
+        }
     };
 
     // ─── Export functions ───
@@ -731,11 +752,27 @@ export default function BlogMonetizer() {
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                                 <div>
                                     <label style={labelStyle}>Image Model</label>
-                                    <select value={imageModel} onChange={e => setImageModel(e.target.value)} style={selectStyle}>
-                                        {IMAGE_MODELS_BY_PROVIDER[imageProvider].map(m => (
-                                            <option key={m.value} value={m.value}>{m.label}</option>
-                                        ))}
-                                    </select>
+                                    <div style={{ display: "flex", gap: 8 }}>
+                                        <select value={imageModel} onChange={e => setImageModel(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
+                                            {IMAGE_MODELS_BY_PROVIDER[imageProvider].map(m => (
+                                                <option key={m.value} value={m.value}>{m.label}</option>
+                                            ))}
+                                        </select>
+                                        <button onClick={handleTestImageApi} disabled={testImageResult.status === 'testing'} style={secondaryBtnStyle}>
+                                            {testImageResult.status === 'testing' ? '⏳ Testing...' : '🧪 Test Image API'}
+                                        </button>
+                                    </div>
+                                    {testImageResult.status === 'success' && (
+                                        <div style={{ marginTop: 8, padding: 8, background: "#10b98120", border: "1px solid #10b981", borderRadius: 8 }}>
+                                            <p style={{ color: "#10b981", fontSize: 13, margin: "0 0 8px 0", fontWeight: 600 }}>✅ {imageProvider === 'google-imagen' ? 'Google Imagen' : 'Replicate'} working! Test image generated.</p>
+                                            <img src={testImageResult.url} alt="Test" style={{ width: 100, height: 100, borderRadius: 6, objectFit: "cover" }} />
+                                        </div>
+                                    )}
+                                    {testImageResult.status === 'error' && (
+                                        <div style={{ marginTop: 8, padding: 8, background: "#ef444420", border: "1px solid #ef4444", borderRadius: 8 }}>
+                                            <p style={{ color: "#ef4444", fontSize: 13, margin: 0, fontWeight: 600 }}>❌ Failed: {testImageResult.error}</p>
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     {/* Show image key field — shared if same provider as writing */}

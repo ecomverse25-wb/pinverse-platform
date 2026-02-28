@@ -68,8 +68,8 @@ export default function BlogMonetizerEditor({
     const handleRegenerateImage = async (promptOverride?: string) => {
         const needsReplicateKey = imageProvider === "replicate";
         const needsGeminiKey = imageProvider === "google-imagen";
-        if (needsReplicateKey && !replicateKey) { alert("Replicate API key required."); return; }
-        if (needsGeminiKey && !geminiKey) { alert("Gemini API key required for Google Imagen."); return; }
+        if (needsReplicateKey && (!replicateKey || replicateKey.trim() === "")) { alert("Replicate API key required. Please add it in Setup."); return; }
+        if (needsGeminiKey && (!geminiKey || geminiKey.trim() === "")) { alert("Gemini API key is missing. Please add it in Setup."); return; }
 
         setRegeneratingImage(true);
         const summary = article.content.replace(/<[^>]*>/g, " ").slice(0, 800);
@@ -121,6 +121,13 @@ export default function BlogMonetizerEditor({
 
         // Featured image
         try {
+            if (imageProvider === "google-imagen" && (!geminiKey || geminiKey.trim() === "")) {
+                throw new Error("Gemini API key is missing. Please add it in Setup.");
+            }
+            if (imageProvider === "replicate" && (!replicateKey || replicateKey.trim() === "")) {
+                throw new Error("Replicate API key is missing. Please add it in Setup.");
+            }
+
             const summary = content.replace(/<[^>]*>/g, " ").slice(0, 800);
             const featResult = await generateFeaturedImageAction(
                 article.title, summary,
@@ -213,8 +220,8 @@ export default function BlogMonetizerEditor({
                         <p style={{ color: "#94a3b8", fontSize: 13, margin: "4px 0 0 0" }}>
                             🔑 {article.keyword} · {article.wordCount || 0} words · {article.status.toUpperCase()}
                             {article.imageError && (
-                                <span style={{ color: "#ef4444", marginLeft: 8, fontWeight: 600, fontSize: 12 }}>
-                                    {article.imageError.length > 80 ? article.imageError.slice(0, 80) + "…" : article.imageError}
+                                <span style={{ color: "#ef4444", marginLeft: 8, fontWeight: 600, fontSize: 12 }} title={article.imageError}>
+                                    ⚠️ {article.imageError.length > 80 ? article.imageError.slice(0, 80) + "…" : article.imageError}
                                 </span>
                             )}
                             {article.imageError && (
@@ -265,24 +272,31 @@ export default function BlogMonetizerEditor({
                     {article.imageError && (
                         <div style={{
                             background: "#2a1a1a", border: "1px solid #7f1d1d", borderRadius: 8,
-                            padding: 12, marginBottom: 16, display: "flex", alignItems: "center",
-                            justifyContent: "space-between", gap: 12, flexWrap: "wrap",
+                            padding: 12, marginBottom: 16, display: "flex", flexDirection: "column", gap: 12,
                         }}>
-                            <p style={{ color: "#fca5a5", fontSize: 13, margin: 0, flex: 1, minWidth: 200 }}>
-                                {article.imageError}
-                            </p>
-                            <button
-                                onClick={handleRegenerateImagesOnly}
-                                disabled={regeneratingAllImages}
-                                style={{
-                                    background: "#f0c040", color: "#0f1623", border: "none",
-                                    borderRadius: 8, padding: "8px 16px", fontWeight: 600,
-                                    fontSize: 13, cursor: regeneratingAllImages ? "not-allowed" : "pointer",
-                                    flexShrink: 0,
-                                }}
-                            >
-                                {regeneratingAllImages ? "⏳ Regenerating..." : "🖼️ Regenerate Images Only"}
-                            </button>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                                <p style={{ color: "#fca5a5", fontSize: 13, margin: 0, flex: 1, minWidth: 200, fontWeight: 600 }}>
+                                    ⚠️ {article.imageError}
+                                </p>
+                                <button
+                                    onClick={handleRegenerateImagesOnly}
+                                    disabled={regeneratingAllImages}
+                                    style={{
+                                        background: "#f0c040", color: "#0f1623", border: "none",
+                                        borderRadius: 8, padding: "8px 16px", fontWeight: 600,
+                                        fontSize: 13, cursor: regeneratingAllImages ? "not-allowed" : "pointer",
+                                        flexShrink: 0,
+                                    }}
+                                >
+                                    {regeneratingAllImages ? "⏳ Regenerating..." : "🖼️ Regenerate Images"}
+                                </button>
+                            </div>
+                            <details style={{ background: "#1a0f0f", padding: 10, borderRadius: 6, border: "1px solid #5c1818" }}>
+                                <summary style={{ color: "#fca5a5", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>View Error Details</summary>
+                                <pre style={{ color: "#e2e8f0", fontSize: 11, overflowX: "auto", margin: "8px 0 0 0", whiteSpace: "pre-wrap" }}>
+                                    {article.imageError}
+                                </pre>
+                            </details>
                         </div>
                     )}
                     {article.metaDescription && (
