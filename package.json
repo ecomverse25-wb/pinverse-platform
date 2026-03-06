@@ -41,7 +41,7 @@
     "@types/papaparse": "^5.5.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "copy-webpack-plugin": "^13.0.1",
+    "copy-webpack-plugin": "^14.0.0",
     "eslint": "^10.0.2",
     "eslint-config-next": "^12.0.4",
     "tailwindcss": "^4",
