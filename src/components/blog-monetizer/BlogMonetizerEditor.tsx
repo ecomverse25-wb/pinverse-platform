@@ -37,6 +37,7 @@ export default function BlogMonetizerEditor({
     const [publishing, setPublishing] = useState(false);
     const [regeneratingImage, setRegeneratingImage] = useState(false);
     const [regeneratingAllImages, setRegeneratingAllImages] = useState(false);
+    const [regeneratingSectionIdx, setRegeneratingSectionIdx] = useState<number | null>(null);
     const [editingPrompt, setEditingPrompt] = useState(false);
     const [customPrompt, setCustomPrompt] = useState(article.featuredImagePrompt || "");
     const [expanded, setExpanded] = useState(false);
@@ -176,9 +177,41 @@ export default function BlogMonetizerEditor({
                 );
                 if (secResult.success && secResult.imageUrl) {
                     newSectionImages.push({ h2Index: j, h2Title: h2Headings[j], imageUrl: secResult.imageUrl });
+                } else {
+                    // Retry once
+                    console.log(`[Images] Retrying failed regen for: "${h2Headings[j]}"`);
+                    try {
+                        const retryResult = await generateH2ImageAction(
+                            h2Headings[j], "blog", replicateKey, imgbbKey,
+                            imageProvider, imageModel, geminiKey,
+                            imageSettings.dimensions,
+                        );
+                        if (retryResult.success && retryResult.imageUrl) {
+                            newSectionImages.push({ h2Index: j, h2Title: h2Headings[j], imageUrl: retryResult.imageUrl });
+                        } else {
+                            newSectionImages.push({ h2Index: j, h2Title: h2Headings[j], imageUrl: "" });
+                        }
+                    } catch {
+                        newSectionImages.push({ h2Index: j, h2Title: h2Headings[j], imageUrl: "" });
+                    }
                 }
             } catch (err) {
                 console.error(`Section image ${j} regen failed:`, err);
+                // Retry once on exception
+                try {
+                    const retryResult = await generateH2ImageAction(
+                        h2Headings[j], "blog", replicateKey, imgbbKey,
+                        imageProvider, imageModel, geminiKey,
+                        imageSettings.dimensions,
+                    );
+                    if (retryResult.success && retryResult.imageUrl) {
+                        newSectionImages.push({ h2Index: j, h2Title: h2Headings[j], imageUrl: retryResult.imageUrl });
+                    } else {
+                        newSectionImages.push({ h2Index: j, h2Title: h2Headings[j], imageUrl: "" });
+                    }
+                } catch {
+                    newSectionImages.push({ h2Index: j, h2Title: h2Headings[j], imageUrl: "" });
+                }
             }
         }
 
@@ -190,6 +223,31 @@ export default function BlogMonetizerEditor({
             imageError: newImageError,
         });
         setRegeneratingAllImages(false);
+    };
+
+    // ─── Regenerate Single Section Image ───
+    const handleRegenerateSingleImage = async (sectionIndex: number) => {
+        const img = article.sectionImages[sectionIndex];
+        if (!img || img.isFAQ) return;
+
+        setRegeneratingSectionIdx(sectionIndex);
+        try {
+            const secResult = await generateH2ImageAction(
+                img.h2Title, "blog", replicateKey, imgbbKey,
+                imageProvider, imageModel, geminiKey,
+                imageSettings.dimensions,
+            );
+            if (secResult.success && secResult.imageUrl) {
+                const updatedImages = [...article.sectionImages];
+                updatedImages[sectionIndex] = { ...updatedImages[sectionIndex], imageUrl: secResult.imageUrl };
+                onUpdate(index, { ...article, sectionImages: updatedImages });
+            } else {
+                alert(secResult.error || "Image regeneration failed.");
+            }
+        } catch (err) {
+            alert(err instanceof Error ? err.message : "Image regeneration failed.");
+        }
+        setRegeneratingSectionIdx(null);
     };
 
     // ─── Copy Meta Description ───
@@ -348,11 +406,6 @@ export default function BlogMonetizerEditor({
                                     alt={article.title}
                                     style={{ width: "100%", maxHeight: 500, objectFit: "cover", borderRadius: 12 }}
                                 />
-                                <span style={{
-                                    position: "absolute", bottom: 8, left: 8,
-                                    background: "rgba(0,0,0,0.7)", color: "#f0c040", padding: "2px 8px",
-                                    borderRadius: 6, fontSize: 11, fontWeight: 600,
-                                }}>AI Generated</span>
                             </div>
 
                             {/* Image Controls */}
@@ -420,25 +473,79 @@ export default function BlogMonetizerEditor({
                     )}
 
                     {/* Section Images Grid */}
-                    {article.sectionImages.filter(img => !img.isFAQ && img.imageUrl).length > 0 && (
+                    {article.sectionImages.filter(img => !img.isFAQ).length > 0 && (
                         <div style={{ marginBottom: 20 }}>
                             <h4 style={{ color: "#f0c040", marginBottom: 8, fontSize: 14, fontWeight: 600 }}>🖼️ Section Images</h4>
                             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
-                                {article.sectionImages.filter(img => !img.isFAQ && img.imageUrl).map((img, i) => (
-                                    <div key={i} style={{ position: "relative", borderRadius: 12, overflow: "hidden" }}>
-                                        <img
-                                            src={img.imageUrl}
-                                            alt={img.h2Title}
-                                            style={{ width: "100%", aspectRatio: "2/3", objectFit: "cover" }}
-                                        />
-                                        <span style={{
-                                            position: "absolute", bottom: 6, left: 6,
-                                            background: "rgba(0,0,0,0.7)", color: "#e2e8f0", padding: "2px 8px",
-                                            borderRadius: 6, fontSize: 11, maxWidth: "calc(100% - 20px)",
-                                            overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
-                                        }}>{img.h2Title}</span>
-                                    </div>
-                                ))}
+                                {article.sectionImages.map((img, i) => {
+                                    if (img.isFAQ) return null;
+
+                                    // Placeholder for missing images
+                                    if (!img.imageUrl) {
+                                        return (
+                                            <div key={i} style={{
+                                                width: "100%", aspectRatio: "2/3", background: "#0f1623",
+                                                borderRadius: 12, display: "flex", flexDirection: "column",
+                                                alignItems: "center", justifyContent: "center",
+                                                border: "2px dashed #334155",
+                                            }}>
+                                                <span style={{ fontSize: 32, marginBottom: 8 }}>🖼️</span>
+                                                <span style={{ color: "#94a3b8", fontSize: 12, textAlign: "center", padding: "0 12px", marginBottom: 8 }}>
+                                                    Image unavailable for this section
+                                                </span>
+                                                <span style={{ color: "#64748b", fontSize: 11, textAlign: "center", padding: "0 8px", marginBottom: 12, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", maxWidth: "calc(100% - 16px)" }}>
+                                                    {img.h2Title}
+                                                </span>
+                                                <button
+                                                    onClick={() => handleRegenerateSingleImage(i)}
+                                                    disabled={regeneratingSectionIdx === i}
+                                                    style={{
+                                                        background: "#1e2a3a", border: "1px solid #475569",
+                                                        borderRadius: 6, color: "#f0c040", padding: "4px 12px",
+                                                        fontSize: 12, cursor: regeneratingSectionIdx === i ? "not-allowed" : "pointer",
+                                                    }}
+                                                >
+                                                    {regeneratingSectionIdx === i ? "⏳ Generating..." : "♻️ Try again"}
+                                                </button>
+                                            </div>
+                                        );
+                                    }
+
+                                    // Normal image with hover regenerate button
+                                    return (
+                                        <div key={i} style={{ position: "relative", borderRadius: 12, overflow: "hidden" }}
+                                            className="bm-section-img-card">
+                                            <img
+                                                src={img.imageUrl}
+                                                alt={img.h2Title}
+                                                style={{ width: "100%", aspectRatio: "2/3", objectFit: "cover" }}
+                                            />
+                                            <span style={{
+                                                position: "absolute", bottom: 6, left: 6,
+                                                background: "rgba(0,0,0,0.7)", color: "#e2e8f0", padding: "2px 8px",
+                                                borderRadius: 6, fontSize: 11, maxWidth: "calc(100% - 20px)",
+                                                overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
+                                            }}>{img.h2Title}</span>
+                                            <button
+                                                onClick={() => handleRegenerateSingleImage(i)}
+                                                disabled={regeneratingSectionIdx === i}
+                                                title="Regenerate this image"
+                                                style={{
+                                                    position: "absolute", top: 6, right: 6,
+                                                    background: "rgba(0,0,0,0.7)", border: "none",
+                                                    borderRadius: 6, color: "#f0c040", padding: "4px 8px",
+                                                    fontSize: 14, cursor: regeneratingSectionIdx === i ? "not-allowed" : "pointer",
+                                                    opacity: regeneratingSectionIdx === i ? 1 : 0.7,
+                                                    transition: "opacity 0.2s",
+                                                }}
+                                                onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+                                                onMouseLeave={e => (e.currentTarget.style.opacity = regeneratingSectionIdx === i ? "1" : "0.7")}
+                                            >
+                                                {regeneratingSectionIdx === i ? "⏳" : "♻️"}
+                                            </button>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

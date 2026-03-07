@@ -117,6 +117,22 @@ function sanitizeArticleTitle(title: string): string {
         .trim();
 }
 
+function validateTitleNumber(title: string, h2Count: number): string {
+    // Find any number in the title
+    const numberMatch = title.match(/\b(\d+)\b/);
+    if (!numberMatch) return title; // no number, fine as-is
+
+    const titleNumber = parseInt(numberMatch[1]);
+
+    // If title number doesn't match H2 count, fix it
+    if (titleNumber !== h2Count) {
+        console.log(`[TITLE] Fixing title number: ${titleNumber} → ${h2Count} in "${title}"`);
+        return title.replace(/\b\d+\b/, h2Count.toString());
+    }
+
+    return title;
+}
+
 export async function generateBulkTitlesAction(
     keywords: string[],
     tone: Tone,
@@ -258,6 +274,22 @@ Title rules:
 - Use formats: "X Best...", "How to...", "The Complete Guide to...", 
   "X Reasons...", "X Ways..."
 
+CRITICAL TITLE RULE — NUMBER CONSISTENCY:
+The user has configured exactly ${h2Count} H2 sections.
+If your title includes a number, it MUST match ${h2Count}.
+
+Examples for h2Sections = ${h2Count}:
+✅ "${h2Count} Best ${keyword} Ideas to Maximize Your Home"
+✅ "${h2Count} Genius Ways to ${keyword}"
+✅ "${keyword}: ${h2Count} Expert Tips That Work"
+❌ "15 Best ${keyword}" ← WRONG number
+❌ "10 Ways to..." ← WRONG number
+
+If you use a number in the title, use EXACTLY ${h2Count}.
+If you don't want to use a number, use a non-numeric format:
+"The Complete Guide to ${keyword}"
+"How to Maximize Every Inch of Your Small Space"
+
 STEP 2 - ARTICLE: Then write the full article.
 Start the article body with <h1>Your SEO Title Here</h1>
 (use the SAME title from STEP 1)
@@ -285,7 +317,11 @@ Rules:
 REQUIRED STRUCTURE:
 1. Start with <h1>Your SEO Title Here</h1>
 2. Opening paragraph (~100 words) — engaging, immediately useful
-3. Exactly ${h2Count} H2 sections with varied engaging subheadings using <h2> tags
+3. You must write EXACTLY ${h2Count} H2 sections (not counting the FAQ H2) with varied engaging subheadings using <h2> tags.
+   No more, no less. Each H2 must be a distinct idea/tip.
+   The article introduction must NOT promise more ideas than ${h2Count}.
+   If title says "${h2Count} ideas", the intro must say "${h2Count} ideas" and there must be exactly ${h2Count} H2s.
+   Count your H2 sections before finishing. Double check.
 4. After every 2 H2 sections, insert this exact HTML comment on its own line:
    <!-- AD UNIT: Display Ad (300x250 or 728x90) -->
 5. End with an FAQ section containing 3 relevant questions in this format:
@@ -342,6 +378,9 @@ Do NOT wrap in code fences. Do NOT include <html>, <head>, or <body> tags. Just 
         if (articleTitle.toLowerCase() === keyword.toLowerCase()) {
             articleTitle = `The Complete Guide to ${keyword}`;
         }
+
+        // Validate title number matches H2 count
+        articleTitle = validateTitleNumber(articleTitle, h2Count);
 
         console.log(`[TITLE] Extracted SEO title: "${articleTitle}" for keyword: "${keyword}"`);
 

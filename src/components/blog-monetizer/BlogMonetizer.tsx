@@ -138,7 +138,7 @@ export default function BlogMonetizer() {
     });
 
     // ─── Session Cache Clearing ───
-    const SESSION_VERSION = "v4"; // was v3, now v4
+    const SESSION_VERSION = "v5"; // bumped: image retry + placeholder support
     useEffect(() => {
         const savedVersion = localStorage.getItem("bm-session-version");
         if (savedVersion !== SESSION_VERSION) {
@@ -497,6 +497,7 @@ export default function BlogMonetizer() {
                         }
 
                         setStatusMessage(`🎨 Generating section images: ${j + 1}/${h2Headings.length} — "${item.keyword}"`);
+                        let sectionImageUrl: string | undefined;
                         try {
                             const secResult = await generateH2ImageAction(
                                 h2Headings[j], settings.niche, replicateKey, imgbbKey,
@@ -504,15 +505,36 @@ export default function BlogMonetizer() {
                                 settings.featuredImage.dimensions
                             );
                             if (secResult.success && secResult.imageUrl) {
-                                sectionImages.push({
-                                    h2Index: j,
-                                    h2Title: h2Headings[j],
-                                    imageUrl: secResult.imageUrl,
-                                });
+                                sectionImageUrl = secResult.imageUrl;
                             }
                         } catch (err) {
                             console.error(`[BlogMonetizer] Section image ${j} failed:`, err);
                         }
+
+                        // Retry once if first attempt failed
+                        if (!sectionImageUrl) {
+                            console.log(`[Images] Retrying failed image for: "${h2Headings[j]}"`);
+                            setStatusMessage(`🔄 Retrying section image ${j + 1}/${h2Headings.length} — "${item.keyword}"`);
+                            try {
+                                const retryResult = await generateH2ImageAction(
+                                    h2Headings[j], settings.niche, replicateKey, imgbbKey,
+                                    imageProvider, imageModel, geminiKey,
+                                    settings.featuredImage.dimensions
+                                );
+                                if (retryResult.success && retryResult.imageUrl) {
+                                    sectionImageUrl = retryResult.imageUrl;
+                                }
+                            } catch (retryErr) {
+                                console.error(`[Images] Retry also failed for: "${h2Headings[j]}"`, retryErr);
+                            }
+                        }
+
+                        // Always push — empty imageUrl will show placeholder in editor
+                        sectionImages.push({
+                            h2Index: j,
+                            h2Title: h2Headings[j],
+                            imageUrl: sectionImageUrl || "",
+                        });
                     }
                 } else {
                     imageError = `${imageProvider === "google-imagen" ? "Gemini" : "Replicate"} API key not set — images skipped`;
@@ -535,7 +557,6 @@ export default function BlogMonetizer() {
                                 return `${match}
 <div style="margin:12px 0;position:relative;">
   <img src="${img.imageUrl}" alt="${img.h2Title}" style="width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:12px;" />
-  <span style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,0.7);color:#f0c040;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;">AI Generated</span>
 </div>`;
                             }
                             count++;
