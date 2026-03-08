@@ -1239,7 +1239,7 @@ export default function BlogMonetizer() {
 
             {/* ━━━━━━━━ PINTEREST PINS TAB ━━━━━━━━ */}
             {activeTab === "pins" && (
-                <BlogMonetizerPinExport articles={articles} wpBaseUrl={wpUrl} />
+                <BlogMonetizerPinExport articles={articles} wpBaseUrl={wpUrl} geminiKey={geminiKey} geminiModel={writingModel} />
             )}
         </div>
     );

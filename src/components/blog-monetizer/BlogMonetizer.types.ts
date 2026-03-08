@@ -142,10 +142,12 @@ export interface BlogArticle {
 
 export interface PinData {
     imageUrl: string;
+    overlayImageUrl?: string;
     title: string;
     description: string;
     destinationUrl: string;
     sourceArticleKeyword: string;
+    sectionHeading: string;
     type: 'featured' | 'section';
 }
 
