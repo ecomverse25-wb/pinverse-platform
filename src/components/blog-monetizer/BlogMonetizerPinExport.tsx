@@ -135,6 +135,55 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl }: BlogMone
         URL.revokeObjectURL(url);
     };
 
+    // ─── Download single image as 9:16 via canvas crop ───
+    const downloadAs916 = async (imageUrl: string, filename: string) => {
+        try {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.src = imageUrl;
+            await new Promise<void>((resolve, reject) => {
+                img.onload = () => resolve();
+                img.onerror = () => reject(new Error("Failed to load image"));
+            });
+
+            const targetRatio = 9 / 16;
+            const imgRatio = img.width / img.height;
+
+            let cropWidth = img.width;
+            let cropHeight = img.height;
+            let offsetX = 0;
+            let offsetY = 0;
+
+            if (imgRatio > targetRatio) {
+                cropWidth = img.height * targetRatio;
+                offsetX = (img.width - cropWidth) / 2;
+            } else if (imgRatio < targetRatio) {
+                cropHeight = img.width / targetRatio;
+                offsetY = (img.height - cropHeight) / 2;
+            }
+
+            const canvas = document.createElement("canvas");
+            canvas.width = 1000;
+            canvas.height = 1778;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return;
+            ctx.drawImage(img, offsetX, offsetY, cropWidth, cropHeight, 0, 0, 1000, 1778);
+
+            const link = document.createElement("a");
+            link.href = canvas.toDataURL("image/jpeg", 0.95);
+            link.download = filename;
+            link.click();
+        } catch {
+            // Fallback to direct download
+            const a = document.createElement("a");
+            a.href = imageUrl;
+            a.download = filename;
+            a.target = "_blank";
+            a.rel = "noopener";
+            a.click();
+        }
+    };
+
     // ─── Copy All Descriptions ───
     const copyAllDescriptions = () => {
         const text = editablePins.map(p => `${p.title}\n${p.description}\n${p.destinationUrl}`).join("\n\n---\n\n");
@@ -200,7 +249,7 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl }: BlogMone
             {/* Pin Grid */}
             <div style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
                 gap: 16,
             }}>
                 {editablePins.map((pin, i) => (
@@ -218,7 +267,7 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl }: BlogMone
                             <img
                                 src={pin.imageUrl}
                                 alt={pin.title}
-                                style={{ width: "100%", aspectRatio: "2/3", objectFit: "cover" }}
+                                style={{ width: "100%", aspectRatio: "9/16", objectFit: "cover" }}
                             />
                             <span style={{
                                 position: "absolute", top: 8, left: 8,
@@ -271,19 +320,16 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl }: BlogMone
                             />
 
                             <div style={{ display: "flex", gap: 8 }}>
-                                <a
-                                    href={pin.imageUrl}
-                                    download
-                                    target="_blank"
-                                    rel="noopener"
+                                <button
+                                    onClick={() => downloadAs916(pin.imageUrl, `pin-${i + 1}-${pin.sourceArticleKeyword.replace(/\s+/g, "-")}.jpg`)}
                                     style={{
                                         flex: 1, background: "#1e2a3a", border: "1px solid #334155", borderRadius: 8,
-                                        color: "#e2e8f0", padding: "6px 0", textAlign: "center", textDecoration: "none",
-                                        fontSize: 13,
+                                        color: "#e2e8f0", padding: "6px 0", textAlign: "center",
+                                        fontSize: 13, cursor: "pointer",
                                     }}
                                 >
-                                    ⬇️ Download
-                                </a>
+                                    ⬇️ Download 9:16
+                                </button>
                                 <a
                                     href={`https://www.pinterest.com/pin/create/button/?url=${encodeURIComponent(pin.destinationUrl)}&media=${encodeURIComponent(pin.imageUrl)}&description=${encodeURIComponent(pin.description)}`}
                                     target="_blank"

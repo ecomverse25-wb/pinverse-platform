@@ -9,10 +9,10 @@ import { generateImageWithGoogleImagen } from "./generate-image-google";
 
 function getDimensionConfig(dimensions: ImageDimensions): { width: number; height: number; ratio: string } {
     switch (dimensions) {
-        case '1024x1536': return { width: 1024, height: 1536, ratio: '2:3' };
+        case '1024x1536': return { width: 1024, height: 1536, ratio: '9:16' };
         case '1536x864': return { width: 1536, height: 864, ratio: '16:9' };
         case '1024x1024': return { width: 1024, height: 1024, ratio: '1:1' };
-        default: return { width: 1024, height: 1536, ratio: '2:3' };
+        default: return { width: 1024, height: 1536, ratio: '9:16' };
     }
 }
 
@@ -364,7 +364,7 @@ export async function generateH2ImageAction(
         // Replicate
         if (!replicateKey) return { error: "Replicate API key is missing." };
         const model = imageModel || "black-forest-labs/flux-1.1-pro";
-        const result = await generateImageViaReplicate(prompt, replicateKey, "2:3", model);
+        const result = await generateImageViaReplicate(prompt, replicateKey, "9:16", model);
         if (!result.success || !result.imageUrl) {
             return { error: result.error || "Section image generation failed." };
         }

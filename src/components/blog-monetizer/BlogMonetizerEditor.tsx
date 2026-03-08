@@ -400,11 +400,11 @@ export default function BlogMonetizerEditor({
                     {article.featuredImageUrl && (
                         <div style={{ marginBottom: 20 }}>
                             <h4 style={{ color: "#f0c040", marginBottom: 8, fontSize: 14, fontWeight: 600 }}>✨ Featured Image</h4>
-                            <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
+                            <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", marginBottom: 12, maxWidth: 500, margin: "0 auto 12px auto" }}>
                                 <img
                                     src={article.featuredImageUrl}
                                     alt={article.title}
-                                    style={{ width: "100%", maxHeight: 500, objectFit: "cover", borderRadius: 12 }}
+                                    style={{ width: "100%", aspectRatio: "9/16", objectFit: "cover", borderRadius: 12 }}
                                 />
                             </div>
 
@@ -484,7 +484,7 @@ export default function BlogMonetizerEditor({
                                     if (!img.imageUrl) {
                                         return (
                                             <div key={i} style={{
-                                                width: "100%", aspectRatio: "2/3", background: "#0f1623",
+                                                width: "100%", aspectRatio: "9/16", background: "#0f1623",
                                                 borderRadius: 12, display: "flex", flexDirection: "column",
                                                 alignItems: "center", justifyContent: "center",
                                                 border: "2px dashed #334155",
@@ -518,7 +518,7 @@ export default function BlogMonetizerEditor({
                                             <img
                                                 src={img.imageUrl}
                                                 alt={img.h2Title}
-                                                style={{ width: "100%", aspectRatio: "2/3", objectFit: "cover" }}
+                                                style={{ width: "100%", aspectRatio: "9/16", objectFit: "cover" }}
                                             />
                                             <span style={{
                                                 position: "absolute", bottom: 6, left: 6,
@@ -567,7 +567,7 @@ export default function BlogMonetizerEditor({
                             .bm-article-preview ul, .bm-article-preview ol { color: #e2e8f0; padding-left: 24px; margin-bottom: 12px; }
                             .bm-article-preview li { margin-bottom: 6px; line-height: 1.6; }
                             .bm-article-preview a { color: #f0c040; }
-                            .bm-article-preview img { max-width: 100%; border-radius: 12px; margin: 12px 0; aspect-ratio: 2/3; object-fit: cover; }
+                            .bm-article-preview img { max-width: 100%; border-radius: 12px; margin: 12px auto; aspect-ratio: 9/16; object-fit: cover; display: block; }
                         `}</style>
                         <div
                             className="bm-article-preview"

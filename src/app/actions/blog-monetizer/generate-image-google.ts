@@ -28,7 +28,7 @@ export async function generateImageWithGoogleImagen({
             contents: [{
                 role: "user",
                 parts: [{
-                    text: `Generate a high quality image: ${prompt}. Aspect ratio: ${aspectRatio}. No text, no watermarks, no people. Pinterest-worthy, portrait orientation.`
+                    text: `Generate a tall portrait image (9:16 ratio, taller than wide): ${prompt}. IMPORTANT: The image must be TALL portrait orientation, significantly taller than it is wide, like a Pinterest pin. No text, no watermarks, no people.`
                 }]
             }],
             config: {

@@ -555,9 +555,9 @@ export default function BlogMonetizer() {
                                 if (!img.imageUrl || img.isFAQ) return match;
 
                                 return `${match}
-<div style="margin:12px 0;position:relative;">
-  <img src="${img.imageUrl}" alt="${img.h2Title}" style="width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:12px;" />
-</div>`;
+<figure style="max-width:500px;margin:12px auto;position:relative;">
+  <img src="${img.imageUrl}" alt="${img.h2Title}" style="width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:12px;display:block;" />
+</figure>`;
                             }
                             count++;
                             return match;
