@@ -404,7 +404,7 @@ export default function BlogMonetizerEditor({
                                 <img
                                     src={article.featuredImageUrl}
                                     alt={article.title}
-                                    style={{ width: "100%", aspectRatio: "9/16", objectFit: "cover", borderRadius: 12 }}
+                                    style={{ width: "100%", aspectRatio: "1200/628", objectFit: "cover", borderRadius: 12 }}
                                 />
                             </div>
 

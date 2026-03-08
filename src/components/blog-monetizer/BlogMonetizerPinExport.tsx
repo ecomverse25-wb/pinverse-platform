@@ -1,18 +1,12 @@
+// v3.2
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import type { BlogArticle, PinData } from "./BlogMonetizer.types";
-import { generatePinTextsAction } from "@/app/actions/blog-monetizer/generate-pin-text";
+import type { BlogArticle, PinData, PinStyleType } from "./BlogMonetizer.types";
+import { PIN_STYLE_OPTIONS, ALL_PIN_STYLES } from "./BlogMonetizer.types";
+import { generateSinglePinTextAction } from "@/app/actions/blog-monetizer/generate-pin-text";
 
-// ─── Types ───
-
-type PinStyle = "collage" | "text-top" | "text-middle" | "text-bottom";
-
-interface PinSettings {
-    targetKeyword: string;
-    annotatedInterests: string;
-    pinStyle: PinStyle;
-}
+// ─── Props ───
 
 interface BlogMonetizerPinExportProps {
     articles: BlogArticle[];
@@ -28,6 +22,7 @@ function validatePinDescription(description: string, maxChars: number = 400): st
     cleaned = cleaned.replace(/#\w+/g, "").trim();
     cleaned = cleaned.replace(/\*\*/g, "").trim();
     cleaned = cleaned.replace(/\*/g, "").trim();
+    cleaned = cleaned.replace(/\b(202[0-9])\b/g, "").trim();
     cleaned = cleaned.replace(/\s+/g, " ").trim();
     cleaned = cleaned.replace(/[,\s]+$/, "").trim();
     if (cleaned.length > maxChars) {
@@ -43,9 +38,13 @@ function validatePinDescription(description: string, maxChars: number = 400): st
     return cleaned;
 }
 
+function randomPinStyle(): PinStyleType {
+    return ALL_PIN_STYLES[Math.floor(Math.random() * ALL_PIN_STYLES.length)];
+}
+
 // ─── Canvas Helpers ───
 
-function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number = 3): string[] {
     const words = text.split(" ");
     const lines: string[] = [];
     let currentLine = words[0] || "";
@@ -57,17 +56,25 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
         } else {
             lines.push(currentLine);
             currentLine = words[i];
-            if (lines.length >= 2) {
-                if (i < words.length - 1) {
-                    const l = lines[1] || currentLine;
-                    lines[1] = l.length > 3 ? l.substring(0, l.length - 3) + "..." : l;
+            if (lines.length >= maxLines - 1) {
+                // Last allowed line – add remaining and truncate if needed
+                const remaining = words.slice(i).join(" ");
+                if (ctx.measureText(currentLine + " " + remaining).width <= maxWidth) {
+                    currentLine = currentLine + " " + remaining;
+                } else {
+                    // Truncate
+                    while (i < words.length - 1 && ctx.measureText(currentLine + " " + words[i + 1] + "...").width <= maxWidth) {
+                        i++;
+                        currentLine += " " + words[i];
+                    }
+                    if (i < words.length - 1) currentLine += "...";
                 }
                 break;
             }
         }
     }
-    if (lines.length < 2) lines.push(currentLine);
-    return lines.slice(0, 2);
+    lines.push(currentLine);
+    return lines.slice(0, maxLines);
 }
 
 async function loadImageForCanvas(url: string): Promise<HTMLImageElement> {
@@ -99,99 +106,423 @@ function drawImageCover(
     ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
 }
 
-function applyTextBottomOverlay(ctx: CanvasRenderingContext2D, title: string, W: number, H: number) {
-    const grad = ctx.createLinearGradient(0, H * 0.55, 0, H);
-    grad.addColorStop(0, "rgba(0,0,0,0)");
-    grad.addColorStop(1, "rgba(0,0,0,0.80)");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, H * 0.55, W, H * 0.45);
-
-    ctx.font = "bold 58px Arial, sans-serif";
-    ctx.fillStyle = "#FFFFFF";
+/**
+ * Draw scroll-stopping sticker text: thick dark outline + colored fill + drop shadow.
+ * Mimics the high-impact Pinterest text style seen in top-performing pins.
+ */
+function drawStickerText(
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    x: number, y: number,
+    fillColor: string = "#FFFFFF",
+    strokeColor: string = "rgba(0,0,0,0.85)",
+    strokeWidth: number = 12,
+    shadowOffset: number = 4,
+) {
+    ctx.save();
     ctx.textAlign = "center";
-    ctx.shadowColor = "rgba(0,0,0,0.9)";
-    ctx.shadowBlur = 8;
-    const lines = wrapText(ctx, title, W - 80);
-    const startY = H * 0.78;
-    lines.forEach((line, i) => {
-        ctx.fillText(line, W / 2, startY + i * 74);
-    });
-    ctx.shadowBlur = 0;
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+
+    // Drop shadow layer
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillText(text, x + shadowOffset, y + shadowOffset);
+
+    // Thick stroke outline (the "sticker" border)
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = strokeWidth;
+    ctx.strokeText(text, x, y);
+
+    // Solid fill on top
+    ctx.fillStyle = fillColor;
+    ctx.fillText(text, x, y);
+
+    ctx.restore();
+}
+
+// ─── Warm Colors for Banners ───
+const WARM_COLORS = ["#C45C26", "#8B1A1A", "#B8860B", "#A0522D", "#6B3A2A", "#8B4513", "#CD5C5C", "#D2691E"];
+function randomWarmColor(): string {
+    return WARM_COLORS[Math.floor(Math.random() * WARM_COLORS.length)];
+}
+
+// ─── Decorative border inset ───
+function drawDecoInsetBorder(ctx: CanvasRenderingContext2D, W: number, H: number, color: string, inset: number = 16, lineW: number = 4) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineW;
+    ctx.strokeRect(inset, inset, W - inset * 2, H - inset * 2);
+    ctx.restore();
+}
+
+// ─── Style-specific Pin Overlay ───
+
+function cleanupPinText(text: string): string {
+    let clean = text.replace(/\*\*/g, "").replace(/#/g, "").replace(/\b(20\d{2})\b/g, "").replace(/AI Generated/gi, "").trim();
+    const emojiRegex = /^([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/;
+    let emojis: string[] = [];
+    let match;
+    while ((match = clean.match(emojiRegex))) {
+        emojis.push(match[0]);
+        clean = clean.replace(match[0], "").trim();
+    }
+    if (emojis.length > 0) {
+        clean = emojis[0] + " " + clean;
+    }
+    return clean.replace(/\s+/g, " ").trim().toUpperCase();
 }
 
 async function applyPinOverlay(
     imageUrl: string,
     title: string,
-    style: PinStyle,
+    style: PinStyleType,
     sectionImages?: string[]
 ): Promise<string> {
     const W = 1000;
-    const H = 1778;
+    const H = 1500;
     const canvas = document.createElement("canvas");
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext("2d");
     if (!ctx) return imageUrl;
 
+    const bannerColor = randomWarmColor();
+    const cleanTitle = cleanupPinText(title);
+
     try {
-        if (style === "collage" && sectionImages && sectionImages.length > 0) {
-            const imgs = await Promise.all(sectionImages.slice(0, 3).map(loadImageForCanvas));
-            if (imgs.length >= 3) {
-                drawImageCover(ctx, imgs[0], 0, 0, W, Math.floor(H / 2));
-                drawImageCover(ctx, imgs[1], 0, Math.floor(H / 2), Math.floor(W / 2), Math.floor(H / 2));
-                drawImageCover(ctx, imgs[2], Math.floor(W / 2), Math.floor(H / 2), Math.floor(W / 2), Math.floor(H / 2));
-            } else if (imgs.length === 2) {
-                drawImageCover(ctx, imgs[0], 0, 0, W, Math.floor(H / 2));
-                drawImageCover(ctx, imgs[1], 0, Math.floor(H / 2), W, Math.floor(H / 2));
-            } else {
-                drawImageCover(ctx, imgs[0], 0, 0, W, H);
+        const img = await loadImageForCanvas(imageUrl);
+
+        switch (style) {
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // STYLE 1: TOP BANNER — Solid warm banner top 35%
+            // Like reference image 1 & 2: massive text in colored banner
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            case "top-banner": {
+                drawImageCover(ctx, img, 0, 0, W, H);
+                const bannerH = Math.floor(H * 0.35);
+                // Solid opaque banner
+                ctx.fillStyle = bannerColor;
+                ctx.fillRect(0, 0, W, bannerH);
+                // Decorative gold inset border on banner
+                ctx.save();
+                ctx.strokeStyle = "rgba(255,215,0,0.5)";
+                ctx.lineWidth = 3;
+                ctx.strokeRect(12, 12, W - 24, bannerH - 24);
+                ctx.restore();
+                // MASSIVE text
+                ctx.font = "900 88px 'Impact', 'Anton', 'Arial Black', sans-serif";
+                ctx.textAlign = "center";
+                const lines = wrapText(ctx, cleanTitle, W - 100, 4);
+                const lineH = 100;
+                const totalTextH = lines.length * lineH;
+                const startY = (bannerH - totalTextH) / 2 + 80;
+                lines.forEach((line, i) => {
+                    drawStickerText(ctx, line, W / 2, startY + i * lineH, "#FFFFFF", "rgba(0,0,0,0.7)", 10, 4);
+                });
+                break;
             }
-            applyTextBottomOverlay(ctx, title, W, H);
-        } else {
-            const img = await loadImageForCanvas(imageUrl);
-            drawImageCover(ctx, img, 0, 0, W, H);
 
-            if (style === "text-top") {
-                const grad = ctx.createLinearGradient(0, 0, 0, H * 0.45);
-                grad.addColorStop(0, "rgba(0,0,0,0.78)");
-                grad.addColorStop(1, "rgba(0,0,0,0)");
-                ctx.fillStyle = grad;
-                ctx.fillRect(0, 0, W, H * 0.45);
-
-                ctx.font = "bold 58px Arial, sans-serif";
-                ctx.fillStyle = "#FFFFFF";
-                ctx.textAlign = "center";
-                ctx.shadowColor = "rgba(0,0,0,0.9)";
-                ctx.shadowBlur = 8;
-                const lines = wrapText(ctx, title, W - 80);
-                const startY = H * 0.13;
-                lines.forEach((line, i) => {
-                    ctx.fillText(line, W / 2, startY + i * 74);
-                });
-                ctx.shadowBlur = 0;
-            } else if (style === "text-middle") {
-                ctx.font = "bold 60px Arial, sans-serif";
-                const lines = wrapText(ctx, title, W - 120);
-                const lineH = 76;
-                const boxH = lines.length * lineH + 70;
-                const boxY = H * 0.42 - boxH / 2;
-                const rx = 40, rw = W - 80;
-                ctx.fillStyle = "rgba(0,0,0,0.72)";
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // STYLE 2: BOTTOM FRAME — Decorative scalloped frame bottom 35%
+            // Like reference image 3: festive bottom banner with zig-zag edge
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            case "bottom-frame": {
+                drawImageCover(ctx, img, 0, 0, W, H);
+                const frameH = Math.floor(H * 0.35);
+                const frameY = H - frameH;
+                // Scalloped/zig-zag top edge
+                ctx.fillStyle = bannerColor;
                 ctx.beginPath();
-                ctx.roundRect(rx, boxY, rw, boxH, 24);
+                ctx.moveTo(0, frameY + 30);
+                for (let x = 0; x < W; x += 50) {
+                    ctx.lineTo(x + 25, frameY - 8);
+                    ctx.lineTo(x + 50, frameY + 30);
+                }
+                ctx.lineTo(W, H);
+                ctx.lineTo(0, H);
+                ctx.closePath();
                 ctx.fill();
-
-                ctx.fillStyle = "#FFFFFF";
+                // Inner decorative border
+                ctx.save();
+                ctx.strokeStyle = "rgba(255,215,0,0.4)";
+                ctx.lineWidth = 3;
+                ctx.strokeRect(16, frameY + 40, W - 32, frameH - 56);
+                ctx.restore();
+                // MASSIVE text
+                ctx.font = "900 82px 'Impact', 'Anton', 'Arial Black', sans-serif";
                 ctx.textAlign = "center";
-                ctx.shadowColor = "rgba(0,0,0,0.8)";
-                ctx.shadowBlur = 6;
-                lines.forEach((line, i) => {
-                    ctx.fillText(line, W / 2, boxY + 55 + i * lineH);
+                const lines2 = wrapText(ctx, cleanTitle, W - 120, 4);
+                const lineH2 = 96;
+                const startY2 = frameY + 70;
+                lines2.forEach((line, i) => {
+                    drawStickerText(ctx, line, W / 2, startY2 + i * lineH2, "#FFFFFF", "rgba(0,0,0,0.6)", 8, 4);
                 });
-                ctx.shadowBlur = 0;
-            } else {
-                // text-bottom (default)
-                applyTextBottomOverlay(ctx, title, W, H);
+                break;
+            }
+
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // STYLE 3: CENTER OVERLAY — Semi-transparent overlay mid-center
+            // Like a centered label with massive readable text
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            case "center-overlay": {
+                drawImageCover(ctx, img, 0, 0, W, H);
+                // Large overlay box
+                const overlayH = Math.floor(H * 0.42);
+                const overlayY = (H - overlayH) / 2;
+                const overlayX = 40;
+                const overlayW = W - 80;
+                // Semi-transparent warm background
+                ctx.fillStyle = "rgba(139,69,19,0.88)";
+                ctx.beginPath();
+                ctx.roundRect(overlayX, overlayY, overlayW, overlayH, 24);
+                ctx.fill();
+                // Decorative inner border
+                ctx.strokeStyle = "rgba(255,255,255,0.35)";
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.roundRect(overlayX + 14, overlayY + 14, overlayW - 28, overlayH - 28, 16);
+                ctx.stroke();
+                // MASSIVE text
+                ctx.font = "900 80px 'Impact', 'Anton', 'Arial Black', sans-serif";
+                ctx.textAlign = "center";
+                const lines3 = wrapText(ctx, cleanTitle, overlayW - 80, 4);
+                const lineH3 = 96;
+                const totalH3 = lines3.length * lineH3;
+                const startY3 = overlayY + (overlayH - totalH3) / 2 + 70;
+                lines3.forEach((line, i) => {
+                    drawStickerText(ctx, line, W / 2, startY3 + i * lineH3, "#FFFFFF", "rgba(0,0,0,0.5)", 8, 3);
+                });
+                break;
+            }
+
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // STYLE 4: CENTER BADGE — Ornate elliptical badge
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            case "center-badge": {
+                drawImageCover(ctx, img, 0, 0, W, H);
+                const badgeW = 820;
+                const badgeH = 440;
+                // Decorative badge with shadow
+                ctx.save();
+                ctx.shadowColor = "rgba(0,0,0,0.6)";
+                ctx.shadowBlur = 20;
+                ctx.shadowOffsetY = 8;
+                ctx.fillStyle = "rgba(139,69,19,0.92)";
+                ctx.beginPath();
+                ctx.ellipse(W / 2, H / 2, badgeW / 2, badgeH / 2, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+                // Double decorative border
+                ctx.strokeStyle = "rgba(255,215,0,0.5)";
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.ellipse(W / 2, H / 2, badgeW / 2 - 16, badgeH / 2 - 16, 0, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.strokeStyle = "rgba(255,255,255,0.3)";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.ellipse(W / 2, H / 2, badgeW / 2 - 28, badgeH / 2 - 28, 0, 0, Math.PI * 2);
+                ctx.stroke();
+                // MASSIVE text
+                ctx.font = "900 72px 'Impact', 'Anton', 'Arial Black', sans-serif";
+                ctx.textAlign = "center";
+                const lines4 = wrapText(ctx, cleanTitle, badgeW - 180, 4);
+                const lineH4 = 86;
+                const totalH4 = lines4.length * lineH4;
+                const startY4 = H / 2 - totalH4 / 2 + 50;
+                lines4.forEach((line, i) => {
+                    drawStickerText(ctx, line, W / 2, startY4 + i * lineH4, "#FFFFFF", "rgba(0,0,0,0.5)", 8, 3);
+                });
+                break;
+            }
+
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // STYLE 5: TOP TITLE + POLAROID COLLAGE
+            // Like reference image 1: title banner + scattered food photos
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            case "top-title-collage": {
+                const bannerH5 = Math.floor(H * 0.30);
+                // Fill entire background with banner color
+                ctx.fillStyle = bannerColor;
+                ctx.fillRect(0, 0, W, H);
+                // Gold inset border on full pin
+                drawDecoInsetBorder(ctx, W, H, "rgba(255,215,0,0.45)", 14, 4);
+                // MASSIVE title text in banner zone
+                ctx.font = "900 84px 'Impact', 'Anton', 'Arial Black', sans-serif";
+                ctx.textAlign = "center";
+                const lines5 = wrapText(ctx, cleanTitle, W - 100, 3);
+                const lineH5 = 100;
+                const totalH5 = lines5.length * lineH5;
+                const startY5 = (bannerH5 - totalH5) / 2 + 80;
+                lines5.forEach((line, i) => {
+                    drawStickerText(ctx, line, W / 2, startY5 + i * lineH5, "#FFFFFF", "rgba(0,0,0,0.6)", 10, 4);
+                });
+                // Polaroid collage in bottom section
+                const collageImages = sectionImages && sectionImages.length > 0 ? sectionImages.slice(0, 4) : [imageUrl];
+                const loadedImgs = await Promise.all(collageImages.map(loadImageForCanvas));
+                const polaroidW = 400;
+                const polaroidH = 460;
+                const border = 18;
+                const positions = [
+                    { x: 60, y: bannerH5 + 30, rot: -4 },
+                    { x: W - polaroidW - 60, y: bannerH5 + 20, rot: 3 },
+                    { x: 100, y: bannerH5 + polaroidH - 60, rot: 2 },
+                    { x: W - polaroidW - 100, y: bannerH5 + polaroidH - 80, rot: -3 },
+                ];
+                loadedImgs.forEach((pImg, idx) => {
+                    if (idx >= positions.length) return;
+                    const pos = positions[idx];
+                    ctx.save();
+                    ctx.translate(pos.x + polaroidW / 2, pos.y + polaroidH / 2);
+                    ctx.rotate((pos.rot * Math.PI) / 180);
+                    ctx.shadowColor = "rgba(0,0,0,0.5)";
+                    ctx.shadowBlur = 16;
+                    ctx.shadowOffsetX = 5;
+                    ctx.shadowOffsetY = 5;
+                    ctx.fillStyle = "#FFFFFF";
+                    ctx.fillRect(-polaroidW / 2, -polaroidH / 2, polaroidW, polaroidH);
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
+                    drawImageCover(ctx, pImg, -polaroidW / 2 + border, -polaroidH / 2 + border, polaroidW - border * 2, polaroidH - border * 2 - 50);
+                    ctx.restore();
+                });
+                break;
+            }
+
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // STYLE 6: SPLIT STACK — Top photo + title strip + bottom photo
+            // Like reference image 5 (blueberry muffins): photo-strip-photo
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            case "split-stack": {
+                const topH = Math.floor(H * 0.38);
+                const stripH = Math.floor(H * 0.24);
+                const bottomH = H - topH - stripH;
+                // Top photo
+                drawImageCover(ctx, img, 0, 0, W, topH);
+                // Bottom photo
+                const bottomImg = sectionImages && sectionImages.length > 0
+                    ? await loadImageForCanvas(sectionImages[0])
+                    : img;
+                drawImageCover(ctx, bottomImg, 0, topH + stripH, W, bottomH);
+                // Title strip — dark semi-transparent
+                ctx.fillStyle = "rgba(30,30,40,0.92)";
+                ctx.fillRect(0, topH, W, stripH);
+                // Small subtitle line
+                ctx.font = "600 30px 'Arial', sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillStyle = "rgba(255,255,255,0.6)";
+                ctx.fillText("— HOW TO MAKE —", W / 2, topH + 48);
+                // MASSIVE main title
+                ctx.font = "900 90px 'Impact', 'Anton', 'Arial Black', sans-serif";
+                const splitLines = wrapText(ctx, cleanTitle, W - 80, 2);
+                const splitLineH = 105;
+                const splitStartY = topH + 80 + splitLineH;
+                splitLines.forEach((line, i) => {
+                    drawStickerText(ctx, line, W / 2, splitStartY + i * splitLineH, "#FFFFFF", "rgba(0,0,0,0.7)", 10, 4);
+                });
+                break;
+            }
+
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // STYLE 7: RETRO BUBBLE — Sticker text floating on hero photo
+            // Like reference image 4 (chocolate cake): thick outline sticker text
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            case "retro-bubble": {
+                drawImageCover(ctx, img, 0, 0, W, H);
+                // Slight darken vignette for contrast
+                const vignetteGrad = ctx.createRadialGradient(W / 2, H / 2, W * 0.3, W / 2, H / 2, W);
+                vignetteGrad.addColorStop(0, "rgba(0,0,0,0)");
+                vignetteGrad.addColorStop(1, "rgba(0,0,0,0.35)");
+                ctx.fillStyle = vignetteGrad;
+                ctx.fillRect(0, 0, W, H);
+                // MASSIVE sticker text — floating directly on photo
+                // Text positioned in upper 40% of the pin
+                ctx.font = "900 92px 'Impact', 'Anton', 'Arial Black', sans-serif";
+                ctx.textAlign = "center";
+                const bubbleLines = wrapText(ctx, cleanTitle, W - 100, 4);
+                const bubbleLineH = 108;
+                const totalBubbleH = bubbleLines.length * bubbleLineH;
+                const bubbleStartY = 120 + bubbleLineH;
+                // Extra thick stroke for the "sticker peel" effect
+                bubbleLines.forEach((line, i) => {
+                    const y = bubbleStartY + i * bubbleLineH;
+                    drawStickerText(ctx, line, W / 2, y, "#FFF5E6", "rgba(60,30,15,0.92)", 16, 5);
+                });
+                break;
+            }
+
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // STYLE 8: TRI-PHOTO STACK — 3 panels + floating badge
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            case "tri-photo-stack": {
+                const panelH = Math.floor(H / 3);
+                const imgs = [img];
+                if (sectionImages && sectionImages.length > 0) {
+                    const loaded = await Promise.all(sectionImages.slice(0, 2).map(loadImageForCanvas));
+                    imgs.push(...loaded);
+                }
+                for (let p = 0; p < 3; p++) {
+                    const pImg = imgs[p % imgs.length];
+                    drawImageCover(ctx, pImg, 0, p * panelH, W, panelH);
+                    // Thin divider between panels
+                    if (p > 0) {
+                        ctx.fillStyle = "#FFFFFF";
+                        ctx.fillRect(0, p * panelH - 2, W, 4);
+                    }
+                }
+                // Floating badge — larger and more prominent
+                const badgeW8 = 860;
+                const badgeH8 = 280;
+                const badgeX8 = (W - badgeW8) / 2;
+                const badgeY8 = (H - badgeH8) / 2;
+                ctx.save();
+                ctx.shadowColor = "rgba(0,0,0,0.6)";
+                ctx.shadowBlur = 24;
+                ctx.shadowOffsetY = 8;
+                ctx.fillStyle = bannerColor;
+                ctx.beginPath();
+                ctx.roundRect(badgeX8, badgeY8, badgeW8, badgeH8, 20);
+                ctx.fill();
+                ctx.restore();
+                // Gold border on badge
+                ctx.strokeStyle = "rgba(255,215,0,0.5)";
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.roundRect(badgeX8 + 10, badgeY8 + 10, badgeW8 - 20, badgeH8 - 20, 14);
+                ctx.stroke();
+                // MASSIVE text in badge
+                ctx.font = "900 72px 'Impact', 'Anton', 'Arial Black', sans-serif";
+                ctx.textAlign = "center";
+                const lines8 = wrapText(ctx, cleanTitle, badgeW8 - 100, 3);
+                const lineH8 = 84;
+                const totalH8 = lines8.length * lineH8;
+                const startY8 = badgeY8 + (badgeH8 - totalH8) / 2 + 60;
+                lines8.forEach((line, i) => {
+                    drawStickerText(ctx, line, W / 2, startY8 + i * lineH8, "#FFFFFF", "rgba(0,0,0,0.5)", 8, 3);
+                });
+                break;
+            }
+
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // DEFAULT FALLBACK: Gradient overlay with massive bottom text
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            default: {
+                drawImageCover(ctx, img, 0, 0, W, H);
+                const grad = ctx.createLinearGradient(0, H * 0.45, 0, H);
+                grad.addColorStop(0, "rgba(0,0,0,0)");
+                grad.addColorStop(1, "rgba(0,0,0,0.85)");
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, H * 0.45, W, H * 0.55);
+                ctx.font = "900 88px 'Impact', 'Anton', 'Arial Black', sans-serif";
+                ctx.textAlign = "center";
+                const defLines = wrapText(ctx, cleanTitle, W - 100, 4);
+                const defLineH = 104;
+                const defStartY = H - (defLines.length * defLineH) - 40;
+                defLines.forEach((line, i) => {
+                    drawStickerText(ctx, line, W / 2, defStartY + i * defLineH, "#FFFFFF", "rgba(0,0,0,0.7)", 10, 4);
+                });
+                break;
             }
         }
         return canvas.toDataURL("image/jpeg", 0.92);
@@ -200,28 +531,32 @@ async function applyPinOverlay(
     }
 }
 
+// ─── Pin Image Prompt Builder ───
+
+export function buildPinStylePrompt(style: PinStyleType, niche: string): string {
+    const base = `Ultra high quality photorealistic ${niche} food photography, Pinterest pin, 9:16 vertical portrait, professional studio lighting, sharp focus, vibrant colors, no text or watermarks embedded in the raw photo.`;
+
+    const styleAdditions: Record<PinStyleType, string> = {
+        "top-banner": " Flat lay overhead shot of colorful food spread on rustic wooden table, warm ambient lighting, composition leaves top 25% of frame with slightly less detail to allow text overlay placement.",
+        "bottom-frame": " Festive colorful overhead scene with decorative cultural props, highly saturated vibrant colors, composition is visually lighter and less busy in the bottom 30% of the frame.",
+        "center-overlay": " Overhead flat lay food arrangement, warm earthy tones, centered food composition, soft natural window lighting from the side.",
+        "center-badge": " Aerial overhead shot of food spread on rustic wooden or decorative tile surface, vibrant warm color palette with terracotta and earth tones.",
+        "top-title-collage": " Generate a clean close-up food hero shot with strong colors and sharp detail. This will be composited into a polaroid collage layout.",
+        "split-stack": " Close-up portrait-oriented shot of the hero food item, clean background, sharp focus on food, slightly blurred background. This will be used in a split-panel layout.",
+        "retro-bubble": " Close-up beauty hero shot of the main food item centered in frame, moody warm studio lighting, dark or softly blurred background, dramatic food photography style.",
+        "tri-photo-stack": " Clean close-up shot of one specific food item or dish from this article, sharp and well-lit. This will be stacked with 2 other similar shots.",
+    };
+
+    return base + (styleAdditions[style] || "");
+}
+
 // ─── Component ───
 
 export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey, geminiModel }: BlogMonetizerPinExportProps) {
-    // ─── Pin Settings (persisted to localStorage) ───
-    const [pinSettings, setPinSettings] = useState<PinSettings>(() => {
-        if (typeof window !== "undefined") {
-            try {
-                const saved = localStorage.getItem("bm-pin-settings");
-                if (saved) return JSON.parse(saved);
-            } catch { /* use defaults */ }
-        }
-        const firstKeyword = articles.find(a => a.status === "ready" || a.status === "published")?.keyword || "";
-        return { targetKeyword: firstKeyword, annotatedInterests: "", pinStyle: "text-bottom" as PinStyle };
-    });
-
-    useEffect(() => {
-        localStorage.setItem("bm-pin-settings", JSON.stringify(pinSettings));
-    }, [pinSettings]);
-
     const [generatingText, setGeneratingText] = useState(false);
     const [applyingOverlays, setApplyingOverlays] = useState(false);
     const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
+    const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0 });
 
     // ─── Build pin data ───
     const buildPins = useCallback((): PinData[] => {
@@ -241,6 +576,11 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
                     sourceArticleKeyword: article.keyword,
                     sectionHeading: article.title,
                     type: "featured",
+                    pinTargetKeyword: article.keyword,
+                    pinAnnotatedInterests: "",
+                    pinTitle: "",
+                    pinDescription: "",
+                    pinStyle: randomPinStyle(),
                 });
             }
             for (const img of article.sectionImages) {
@@ -255,6 +595,11 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
                     sourceArticleKeyword: article.keyword,
                     sectionHeading: img.h2Title,
                     type: "section",
+                    pinTargetKeyword: article.keyword,
+                    pinAnnotatedInterests: "",
+                    pinTitle: "",
+                    pinDescription: "",
+                    pinStyle: randomPinStyle(),
                 });
             }
         }
@@ -270,64 +615,77 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
     const updatePin = (index: number, field: keyof PinData, value: string) => {
         setEditablePins(prev => {
             const copy = [...prev];
-            copy[index] = { ...copy[index], [field]: value };
+            copy[index] = { ...copy[index], [field]: value } as PinData;
             return copy;
         });
     };
 
-    // ─── Gemini Pin Text Generation ───
-    const generatePinTexts = async (pinIndices?: number[]) => {
+    const updatePinStyle = (index: number, style: PinStyleType) => {
+        setEditablePins(prev => {
+            const copy = [...prev];
+            copy[index] = { ...copy[index], pinStyle: style };
+            return copy;
+        });
+    };
+
+    // ─── Generate Pin Texts — Each Pin Independently ───
+    const generateAllPinTexts = async () => {
         if (!geminiKey) { alert("Gemini API key required. Please add it in Setup."); return; }
         setGeneratingText(true);
+        setGenerationProgress({ current: 0, total: editablePins.length });
 
-        const targetPins = pinIndices
-            ? pinIndices.map(i => ({ idx: i, pin: editablePins[i] }))
-            : editablePins.map((pin, idx) => ({ idx, pin }));
+        const updatedPins = [...editablePins];
+        const existingTitles: string[] = [];
 
+        for (let i = 0; i < updatedPins.length; i++) {
+            setGenerationProgress({ current: i + 1, total: updatedPins.length });
+            const pin = updatedPins[i];
 
-        try {
-            const result = await generatePinTextsAction(
-                targetPins.map(p => ({ sectionHeading: p.pin.sectionHeading })),
-                pinSettings.targetKeyword,
-                pinSettings.annotatedInterests,
-                geminiKey,
-                geminiModel || "gemini-2.5-flash",
-            );
+            try {
+                const result = await generateSinglePinTextAction(
+                    pin.sectionHeading,
+                    pin.pinTargetKeyword || pin.sourceArticleKeyword,
+                    pin.pinAnnotatedInterests,
+                    existingTitles,
+                    geminiKey,
+                    geminiModel || "gemini-2.5-flash",
+                );
 
-            if (!result.success || !result.results) {
-                throw new Error(result.error || "Pin text generation failed.");
+                if (result.success && result.title && result.description) {
+                    updatedPins[i] = {
+                        ...pin,
+                        pinTitle: result.title.slice(0, 100),
+                        pinDescription: validatePinDescription(result.description, 400),
+                        pinAnnotatedInterests: pin.pinAnnotatedInterests || result.suggestedInterests || "",
+                        title: result.title.slice(0, 100),
+                        description: validatePinDescription(result.description, 400),
+                    };
+                    existingTitles.push(result.title);
+                }
+            } catch (err) {
+                console.error(`[PinExport] Pin ${i} text generation failed:`, err);
             }
 
-            setEditablePins(prev => {
-                const copy = [...prev];
-                for (const r of result.results!) {
-                    const actualIndex = targetPins[r.pinIndex]?.idx;
-                    if (actualIndex !== undefined && copy[actualIndex]) {
-                        copy[actualIndex] = {
-                            ...copy[actualIndex],
-                            title: r.title.slice(0, 100),
-                            description: validatePinDescription(r.description, 400),
-                        };
-                    }
-                }
-                return copy;
-            });
-        } catch (err) {
-            console.error("[PinExport] Text generation failed:", err);
-            alert(err instanceof Error ? err.message : "Pin text generation failed.");
+            // Small delay between API calls to avoid rate limits
+            if (i < updatedPins.length - 1) {
+                await new Promise(r => setTimeout(r, 500));
+            }
         }
+
+        setEditablePins(updatedPins);
         setGeneratingText(false);
+        setGenerationProgress({ current: 0, total: 0 });
     };
 
     // ─── Apply Overlays to All Pins ───
     const applyAllOverlays = async () => {
         setApplyingOverlays(true);
         // First generate text if not already done
-        if (!generatingText) {
-            await generatePinTexts();
+        if (!editablePins.some(p => p.pinTitle)) {
+            await generateAllPinTexts();
         }
 
-        // Collect all section images for collage mode
+        // Collect section images for collage/stack styles
         const allSectionImageUrls = editablePins.filter(p => p.type === "section" && p.imageUrl).map(p => p.imageUrl);
 
         const updatedPins = [...editablePins];
@@ -337,9 +695,9 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
             try {
                 const overlayUrl = await applyPinOverlay(
                     pin.imageUrl,
-                    pin.title,
-                    pinSettings.pinStyle,
-                    pinSettings.pinStyle === "collage" ? allSectionImageUrls : undefined,
+                    pin.pinTitle || pin.title,
+                    pin.pinStyle,
+                    allSectionImageUrls.length > 0 ? allSectionImageUrls : undefined,
                 );
                 updatedPins[i] = { ...pin, overlayImageUrl: overlayUrl };
             } catch {
@@ -352,27 +710,56 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
 
     // ─── Regenerate Single Pin Text ───
     const regenerateSingleText = async (idx: number) => {
+        if (!geminiKey) return;
         setRegeneratingIdx(idx);
-        await generatePinTexts([idx]);
 
-        // Also apply overlay for this pin
         const pin = editablePins[idx];
-        if (pin?.imageUrl) {
-            try {
+        const existingTitles = editablePins
+            .filter((_, i) => i !== idx)
+            .map(p => p.pinTitle || p.title)
+            .filter(Boolean);
+
+        try {
+            const result = await generateSinglePinTextAction(
+                pin.sectionHeading,
+                pin.pinTargetKeyword || pin.sourceArticleKeyword,
+                pin.pinAnnotatedInterests,
+                existingTitles,
+                geminiKey,
+                geminiModel || "gemini-2.5-flash",
+            );
+
+            if (result.success && result.title && result.description) {
+                setEditablePins(prev => {
+                    const copy = [...prev];
+                    copy[idx] = {
+                        ...copy[idx],
+                        pinTitle: result.title!.slice(0, 100),
+                        pinDescription: validatePinDescription(result.description!, 400),
+                        pinAnnotatedInterests: copy[idx].pinAnnotatedInterests || result.suggestedInterests || "",
+                        title: result.title!.slice(0, 100),
+                        description: validatePinDescription(result.description!, 400),
+                    };
+                    return copy;
+                });
+            }
+
+            // Also apply overlay
+            if (pin.imageUrl) {
                 const allSectionImageUrls = editablePins.filter(p => p.type === "section" && p.imageUrl).map(p => p.imageUrl);
                 const overlayUrl = await applyPinOverlay(
                     pin.imageUrl,
-                    pin.title,
-                    pinSettings.pinStyle,
-                    pinSettings.pinStyle === "collage" ? allSectionImageUrls : undefined,
+                    result.success && result.title ? result.title : (pin.pinTitle || pin.title),
+                    pin.pinStyle,
+                    allSectionImageUrls.length > 0 ? allSectionImageUrls : undefined,
                 );
                 setEditablePins(prev => {
                     const copy = [...prev];
                     if (copy[idx]) copy[idx] = { ...copy[idx], overlayImageUrl: overlayUrl };
                     return copy;
                 });
-            } catch { /* keep original */ }
-        }
+            }
+        } catch { /* keep original */ }
         setRegeneratingIdx(null);
     };
 
@@ -416,20 +803,24 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
 
     // ─── Copy All Descriptions ───
     const copyAllDescriptions = () => {
-        const text = editablePins.map(p => `${p.title}\n${p.description}\n${p.destinationUrl}`).join("\n\n---\n\n");
+        const text = editablePins.map(p => `${p.pinTitle || p.title}\n${p.pinDescription || p.description}\n${p.destinationUrl}`).join("\n\n---\n\n");
         navigator.clipboard.writeText(text);
     };
 
     // ─── Export CSV ───
     const exportCSV = () => {
-        const headers = ["Title", "Description", "Image URL", "Destination URL", "Type", "Keyword"];
+        const headers = ["Title", "Description", "Image URL", "Destination URL", "Type", "Keyword", "Pin Target Keyword", "Pin Annotated Interests", "Pin Title", "Pin Description"];
         const rows = editablePins.map(p => [
-            `"${p.title.replace(/"/g, '""')}"`,
-            `"${p.description.replace(/"/g, '""')}"`,
+            `"${(p.title || "").replace(/"/g, '""')}"`,
+            `"${(p.description || "").replace(/"/g, '""')}"`,
             p.overlayImageUrl || p.imageUrl,
             p.destinationUrl,
             p.type,
             p.sourceArticleKeyword,
+            `"${(p.pinTargetKeyword || "").replace(/"/g, '""')}"`,
+            `"${(p.pinAnnotatedInterests || "").replace(/"/g, '""')}"`,
+            `"${(p.pinTitle || "").replace(/"/g, '""')}"`,
+            `"${(p.pinDescription || "").replace(/"/g, '""')}"`,
         ].join(","));
         const csv = [headers.join(","), ...rows].join("\n");
         const blob = new Blob([csv], { type: "text/csv" });
@@ -445,6 +836,7 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
     const inputStyle: React.CSSProperties = {
         width: "100%", background: "#0f1623", border: "1px solid #334155",
         borderRadius: 8, color: "#e2e8f0", padding: "8px 12px", fontSize: 14,
+        boxSizing: "border-box",
     };
     const selectStyle: React.CSSProperties = {
         ...inputStyle, cursor: "pointer",
@@ -475,77 +867,6 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
 
     return (
         <div>
-            {/* ━━━━━━━━ SETTINGS BAR ━━━━━━━━ */}
-            <div style={{
-                background: "#1a2035", borderRadius: 12, border: "1px solid #334155",
-                padding: 20, marginBottom: 20,
-            }}>
-                <h4 style={{ color: "#f0c040", fontSize: 14, fontWeight: 600, marginBottom: 16, margin: 0 }}>⚙️ Pin Settings</h4>
-                <div style={{
-                    display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr",
-                    gap: 16, marginTop: 12,
-                }}>
-                    {/* Target Keyword */}
-                    <div>
-                        <label style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, display: "block", marginBottom: 4 }}>
-                            Target Keyword
-                        </label>
-                        <input
-                            type="text"
-                            value={pinSettings.targetKeyword}
-                            onChange={e => setPinSettings(prev => ({ ...prev, targetKeyword: e.target.value }))}
-                            placeholder="e.g. Italian chicken recipes"
-                            style={inputStyle}
-                        />
-                    </div>
-
-                    {/* Annotated Interests */}
-                    <div>
-                        <label style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, display: "block", marginBottom: 4 }}>
-                            Annotated Interests
-                        </label>
-                        <input
-                            type="text"
-                            value={pinSettings.annotatedInterests}
-                            onChange={e => setPinSettings(prev => ({ ...prev, annotatedInterests: e.target.value }))}
-                            placeholder="e.g. healthy, meal prep, weeknight dinners"
-                            style={inputStyle}
-                        />
-                        <span style={{ color: "#64748b", fontSize: 10 }}>Comma-separated — woven naturally into descriptions</span>
-                    </div>
-
-                    {/* Pin Style */}
-                    <div>
-                        <label style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, display: "block", marginBottom: 4 }}>
-                            Pin Style
-                        </label>
-                        <select
-                            value={pinSettings.pinStyle}
-                            onChange={e => setPinSettings(prev => ({ ...prev, pinStyle: e.target.value as PinStyle }))}
-                            style={selectStyle}
-                        >
-                            <option value="collage">Collage — Multiple Images</option>
-                            <option value="text-top">Basic — Text at Top</option>
-                            <option value="text-middle">Basic — Text at Middle</option>
-                            <option value="text-bottom">Basic — Text at Bottom</option>
-                        </select>
-                    </div>
-
-                    {/* Aspect Ratio (display only) */}
-                    <div>
-                        <label style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, display: "block", marginBottom: 4 }}>
-                            Aspect Ratio
-                        </label>
-                        <div style={{
-                            ...inputStyle, display: "flex", alignItems: "center",
-                            cursor: "default", color: "#f0c040", fontWeight: 600,
-                        }}>
-                            📌 9:16 — Tall Portrait
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             {/* ━━━━━━━━ ACTION BAR ━━━━━━━━ */}
             <div style={{
                 display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap", alignItems: "center",
@@ -557,11 +878,20 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
                     📌 {editablePins.length} pins ready
                 </span>
                 <button
+                    onClick={generateAllPinTexts}
+                    disabled={generatingText}
+                    style={{ ...goldBtnStyle, opacity: generatingText ? 0.6 : 1 }}
+                >
+                    {generatingText
+                        ? `⏳ Generating ${generationProgress.current}/${generationProgress.total}...`
+                        : "✨ Generate Pins"}
+                </button>
+                <button
                     onClick={applyAllOverlays}
                     disabled={applyingOverlays || generatingText}
                     style={{ ...goldBtnStyle, opacity: applyingOverlays || generatingText ? 0.6 : 1 }}
                 >
-                    {applyingOverlays || generatingText ? "⏳ Processing..." : "✨ Apply to All Pins"}
+                    {applyingOverlays ? "⏳ Applying Overlays..." : "🎨 Apply Overlays"}
                 </button>
                 <button onClick={downloadAllAsZip} style={goldBtnStyle}>
                     ⬇️ Download All as ZIP
@@ -580,8 +910,8 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
             {/* ━━━━━━━━ PIN GRID ━━━━━━━━ */}
             <div style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
-                gap: 16,
+                gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+                gap: 20,
             }}>
                 {editablePins.map((pin, i) => (
                     <div
@@ -593,75 +923,141 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
                             overflow: "hidden",
                         }}
                     >
-                        {/* Image */}
-                        <div style={{ position: "relative" }}>
-                            <img
-                                src={pin.overlayImageUrl || pin.imageUrl}
-                                alt={pin.title}
-                                style={{ width: "100%", aspectRatio: "9/16", objectFit: "cover", display: "block" }}
-                            />
+                        {/* ── Row 1: Pin Number + Style Selector + Regenerate ── */}
+                        <div style={{
+                            display: "flex", alignItems: "center", gap: 8, padding: "10px 14px",
+                            borderBottom: "1px solid #1e2a3a",
+                        }}>
                             <span style={{
-                                position: "absolute", top: 8, left: 8,
                                 background: pin.type === "featured" ? "#f0c040" : "#3b82f6",
-                                color: "#0f1623", padding: "2px 8px", borderRadius: 6,
-                                fontSize: 11, fontWeight: 700,
+                                color: "#0f1623", padding: "2px 10px", borderRadius: 6,
+                                fontSize: 12, fontWeight: 700, whiteSpace: "nowrap",
                             }}>
-                                {pin.type === "featured" ? "⭐ Featured" : "📷 Section"}
+                                #{i + 1} {pin.type === "featured" ? "⭐ Featured" : "📷 Section"}
                             </span>
-                            {pin.overlayImageUrl && (
-                                <span style={{
-                                    position: "absolute", top: 8, right: 8,
-                                    background: "#10b981", color: "#fff", padding: "2px 6px", borderRadius: 6,
-                                    fontSize: 10, fontWeight: 700,
-                                }}>
-                                    ✓ Overlay
-                                </span>
-                            )}
+                            <select
+                                value={pin.pinStyle}
+                                onChange={e => updatePinStyle(i, e.target.value as PinStyleType)}
+                                style={{ ...selectStyle, flex: 1, fontSize: 12, padding: "4px 8px" }}
+                            >
+                                {PIN_STYLE_OPTIONS.map(s => (
+                                    <option key={s.value} value={s.value}>{s.label}</option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={() => regenerateSingleText(i)}
+                                disabled={regeneratingIdx === i}
+                                style={{
+                                    ...secondaryBtnStyle, padding: "4px 10px", fontSize: 11,
+                                    opacity: regeneratingIdx === i ? 0.6 : 1, whiteSpace: "nowrap",
+                                }}
+                            >
+                                {regeneratingIdx === i ? "⏳..." : "✨ Regen"}
+                            </button>
                         </div>
 
-                        {/* Pin Info */}
                         <div style={{ padding: 14 }}>
-                            <label style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600 }}>Pin Title (max 100)</label>
+                            {/* ── Row 2: Target Keyword + Annotated Interests side by side ── */}
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                                <div>
+                                    <label style={{ color: "#94a3b8", fontSize: 10, fontWeight: 600, display: "block", marginBottom: 3 }}>
+                                        Target Keyword
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={pin.pinTargetKeyword}
+                                        onChange={e => updatePin(i, "pinTargetKeyword", e.target.value)}
+                                        placeholder="e.g. Italian recipes"
+                                        style={{ ...inputStyle, fontSize: 12, padding: "6px 10px" }}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ color: "#94a3b8", fontSize: 10, fontWeight: 600, display: "block", marginBottom: 3 }}>
+                                        Annotated Interests
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={pin.pinAnnotatedInterests}
+                                        onChange={e => updatePin(i, "pinAnnotatedInterests", e.target.value)}
+                                        placeholder="e.g. healthy, meal prep"
+                                        style={{ ...inputStyle, fontSize: 12, padding: "6px 10px" }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* ── Row 3: Pin Title full width ── */}
+                            <label style={{ color: "#94a3b8", fontSize: 10, fontWeight: 600, display: "block", marginBottom: 3 }}>
+                                Pin Title (max 100)
+                            </label>
                             <input
                                 type="text"
                                 maxLength={100}
-                                value={pin.title}
-                                onChange={(e) => updatePin(i, "title", e.target.value)}
-                                style={{
-                                    width: "100%", background: "#0f1623", border: "1px solid #334155",
-                                    borderRadius: 6, color: "#e2e8f0", padding: "6px 10px", fontSize: 13,
-                                    marginBottom: 8,
+                                value={pin.pinTitle}
+                                onChange={e => {
+                                    updatePin(i, "pinTitle", e.target.value);
+                                    updatePin(i, "title", e.target.value);
                                 }}
+                                placeholder="AI-generated unique title..."
+                                style={{ ...inputStyle, fontSize: 13, padding: "6px 10px", marginBottom: 8 }}
                             />
 
-                            <label style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600 }}>Pin Description (max 400)</label>
+                            {/* ── Row 4: Pin Description full width textarea ── */}
+                            <label style={{ color: "#94a3b8", fontSize: 10, fontWeight: 600, display: "block", marginBottom: 3 }}>
+                                Pin Description (max 400)
+                            </label>
                             <textarea
                                 maxLength={400}
                                 rows={3}
-                                value={pin.description}
-                                onChange={(e) => updatePin(i, "description", e.target.value)}
+                                value={pin.pinDescription}
+                                onChange={e => {
+                                    updatePin(i, "pinDescription", e.target.value);
+                                    updatePin(i, "description", e.target.value);
+                                }}
+                                placeholder="AI-generated unique description..."
                                 style={{
-                                    width: "100%", background: "#0f1623", border: "1px solid #334155",
-                                    borderRadius: 6, color: "#e2e8f0", padding: "6px 10px", fontSize: 13,
+                                    ...inputStyle, fontSize: 13, padding: "6px 10px",
                                     resize: "vertical", marginBottom: 4,
                                 }}
                             />
-                            <div style={{ textAlign: "right", fontSize: 10, color: pin.description.length > 380 ? "#ef4444" : "#64748b", marginBottom: 8 }}>
-                                {pin.description.length}/400
+                            <div style={{
+                                textAlign: "right", fontSize: 10, marginBottom: 10,
+                                color: (pin.pinDescription || "").length > 380 ? "#ef4444" : (pin.pinDescription || "").length < 150 && (pin.pinDescription || "").length > 0 ? "#f59e0b" : "#64748b",
+                            }}>
+                                {(pin.pinDescription || "").length}/400
                             </div>
 
-                            <label style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600 }}>Destination URL</label>
-                            <input
-                                type="text"
-                                value={pin.destinationUrl}
-                                onChange={(e) => updatePin(i, "destinationUrl", e.target.value)}
-                                style={{
-                                    width: "100%", background: "#0f1623", border: "1px solid #334155",
-                                    borderRadius: 6, color: "#e2e8f0", padding: "6px 10px", fontSize: 13,
-                                    marginBottom: 10,
-                                }}
-                            />
+                            {/* ── Row 5: Destination URL ── */}
+                            <div style={{ marginBottom: 8 }}>
+                                <label style={{ color: "#94a3b8", fontSize: 10, fontWeight: 600, display: "block", marginBottom: 3 }}>
+                                    Destination URL
+                                </label>
+                                <input
+                                    type="text"
+                                    value={pin.destinationUrl}
+                                    onChange={e => updatePin(i, "destinationUrl", e.target.value)}
+                                    style={{ ...inputStyle, fontSize: 12, padding: "6px 10px" }}
+                                />
+                            </div>
 
+                            {/* ── Row 6: Generated 9:16 Pin Image ── */}
+                            <div style={{ position: "relative", marginBottom: 10 }}>
+                                <img
+                                    src={pin.overlayImageUrl || pin.imageUrl}
+                                    alt={pin.pinTitle || pin.title}
+                                    style={{ width: "100%", aspectRatio: "9/16", objectFit: "cover", display: "block", borderRadius: 10 }}
+                                />
+                                {pin.overlayImageUrl && (
+                                    <span style={{
+                                        position: "absolute", top: 8, right: 8,
+                                        background: "#10b981", color: "#fff", padding: "2px 6px", borderRadius: 6,
+                                        fontSize: 10, fontWeight: 700,
+                                    }}>
+                                        ✓ Overlay
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* ── Row 7: Regen Text + Download + Pin buttons ── */}
                             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                                 <button
                                     onClick={() => regenerateSingleText(i)}
@@ -671,7 +1067,7 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
                                         fontSize: 12, opacity: regeneratingIdx === i ? 0.6 : 1,
                                     }}
                                 >
-                                    {regeneratingIdx === i ? "⏳..." : "✨ Regen Text"}
+                                    🖼️ Regen Text
                                 </button>
                                 <button
                                     onClick={() => downloadSingle(pin, i)}
@@ -681,18 +1077,18 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
                                 >
                                     ⬇️ Download
                                 </button>
-                                <a
-                                    href={`https://www.pinterest.com/pin/create/button/?url=${encodeURIComponent(pin.destinationUrl)}&media=${encodeURIComponent(pin.overlayImageUrl || pin.imageUrl)}&description=${encodeURIComponent(pin.description)}`}
-                                    target="_blank"
-                                    rel="noopener"
+                                <button
+                                    onClick={() => {
+                                        const prompt = buildPinStylePrompt(pin.pinStyle, pin.pinTargetKeyword || pin.sourceArticleKeyword);
+                                        navigator.clipboard.writeText(prompt);
+                                        alert("Image prompt copied to clipboard!");
+                                    }}
                                     style={{
-                                        flex: 1, background: "#e60023", border: "none", borderRadius: 8,
-                                        color: "#fff", padding: "6px 0", textAlign: "center", textDecoration: "none",
-                                        fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center",
+                                        flex: 1, ...secondaryBtnStyle, padding: "6px 0", textAlign: "center", fontSize: 12,
                                     }}
                                 >
                                     📌 Pin
-                                </a>
+                                </button>
                             </div>
                         </div>
                     </div>

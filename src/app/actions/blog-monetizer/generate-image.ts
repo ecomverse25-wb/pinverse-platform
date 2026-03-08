@@ -12,6 +12,7 @@ function getDimensionConfig(dimensions: ImageDimensions): { width: number; heigh
         case '1024x1536': return { width: 1024, height: 1536, ratio: '9:16' };
         case '1536x864': return { width: 1536, height: 864, ratio: '16:9' };
         case '1024x1024': return { width: 1024, height: 1024, ratio: '1:1' };
+        case '1200x628': return { width: 1200, height: 628, ratio: '1.91:1' };
         default: return { width: 1024, height: 1536, ratio: '9:16' };
     }
 }
@@ -23,6 +24,7 @@ function getImagenAspectRatio(dimensions: ImageDimensions): "1:1" | "9:16" | "16
         case '1024x1536': return "9:16";
         case '1536x864': return "16:9";
         case '1024x1024': return "1:1";
+        case '1200x628': return "16:9";
         default: return "9:16";
     }
 }

@@ -1,3 +1,4 @@
+// v3.2
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -138,7 +139,7 @@ export default function BlogMonetizer() {
     });
 
     // ─── Session Cache Clearing ───
-    const SESSION_VERSION = "v5"; // bumped: image retry + placeholder support
+    const SESSION_VERSION = "v6"; // v3.2 upgrade: pin styles, per-pin fields, featured image 1200x628
     useEffect(() => {
         const savedVersion = localStorage.getItem("bm-session-version");
         if (savedVersion !== SESSION_VERSION) {
@@ -454,7 +455,7 @@ export default function BlogMonetizer() {
                             settings.featuredImage.promptTemplate,
                             settings.featuredImage.style,
                             settings.featuredImage.colorMood,
-                            settings.featuredImage.dimensions,
+                            "1200x628",
                             geminiKey, replicateKey, imgbbKey, writingModel,
                             imageProvider, imageModel
                         );
@@ -910,7 +911,13 @@ export default function BlogMonetizer() {
                             <div>
                                 <label style={labelStyle}>H2 Sections</label>
                                 <select value={settings.h2Count} onChange={e => updateSettings({ h2Count: Number(e.target.value) as H2Count })} style={selectStyle}>
-                                    {H2_COUNT_OPTIONS.map(n => <option key={n} value={n}>{n} sections</option>)}
+                                    <option value="3">3 sections</option>
+                                    <option value="5">5 sections</option>
+                                    <option value="7">7 sections</option>
+                                    <option value="9">9 sections</option>
+                                    <option value="11">11 sections</option>
+                                    <option value="13">13 sections</option>
+                                    <option value="15">15 sections</option>
                                 </select>
                             </div>
                             <div style={{ gridColumn: "span 3" }}>
