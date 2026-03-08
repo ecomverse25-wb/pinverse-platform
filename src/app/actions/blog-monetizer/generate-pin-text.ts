@@ -76,8 +76,24 @@ Return JSON array ONLY — no explanation, no markdown:
 }
 
 /**
+ * Remove consecutive duplicate words from text (case-insensitive).
+ * e.g. "Italian Sausage Sausage Recipe" → "Italian Sausage Recipe"
+ */
+function deduplicateWords(text: string): string {
+    const words = text.split(/\s+/);
+    const result: string[] = [];
+    for (let i = 0; i < words.length; i++) {
+        if (i === 0 || words[i].toLowerCase() !== words[i - 1].toLowerCase()) {
+            result.push(words[i]);
+        }
+    }
+    return result.join(" ");
+}
+
+/**
  * Generate a SINGLE pin's title and description independently.
- * Used for per-pin independent generation with dedup awareness.
+ * Titles: SHORT (max 7 words), keyword-first, no repeated words.
+ * Descriptions: keyword-first, 4-5 annotated interests woven in naturally.
  */
 export async function generateSinglePinTextAction(
     sectionHeading: string,
@@ -99,22 +115,26 @@ Topic: "${sectionHeading}"
 Target keyword: "${targetKeyword}"
 Annotated interests: "${annotatedInterests}"
 ${existingTitlesBlock}
-TITLE RULES (max 100 characters):
-- Include target keyword naturally as a creative VARIATION — do not just copy it
-- Must be UNIQUE and DIFFERENT from every title listed above
-- Click-worthy, specific to the topic
-- No hashtags, no years (2024/2025/2026), no ** markdown
-- Maximum 1 emoji prefix allowed
-- Must NOT be a copy of the article title
+PIN TITLE RULES (CRITICAL — follow exactly):
+1. MAXIMUM 7 WORDS TOTAL. Count carefully. Do not exceed 7 words.
+2. START with the target keyword "${targetKeyword}" as the FIRST words of the title.
+3. After the keyword, add 2-3 descriptive words about this specific topic.
+4. NO word repetition — every word must appear only ONCE in the title.
+5. No emoji, no hashtags, no years, no ** markdown, no colons.
+6. Must be UNIQUE and DIFFERENT from every title listed above.
+7. Example good titles (if keyword is "Italian sausage recipes"):
+   - "Italian Sausage Recipes for Cozy Dinners"
+   - "Italian Sausage Recipes with Fresh Peppers"
+   - "Italian Sausage Recipes One-Pot Style"
 
-DESCRIPTION RULES (strict, 150-300 characters):
-1. LENGTH: 150-300 characters total. Count carefully.
-2. NO HASHTAGS: Zero # symbols anywhere.
-3. NO MARKDOWN: No ** bold, no * italic. Plain text only.
-4. NO YEARS: Never include any year numbers.
-5. TARGET KEYWORD: Include "${targetKeyword}" ONCE naturally.
-6. ANNOTATED INTERESTS: Naturally weave in 2-3 of: "${annotatedInterests}".
-7. STYLE: Human-like, conversational, 2-3 natural sentences. No filler like "Click to learn" or "Save this pin".
+PIN DESCRIPTION RULES (strict, 150-400 characters):
+1. FIRST SENTENCE: Must START with "${targetKeyword}" as the opening words.
+2. ANNOTATED INTERESTS: Naturally weave in 4-5 of these interests: "${annotatedInterests}". Explain them in context — do not just list them.
+3. LENGTH: 150-400 characters. 2-3 natural sentences.
+4. NO padding, no filler phrases like "Click to learn" or "Save this pin" or "Check out".
+5. NO HASHTAGS, NO MARKDOWN, NO YEARS.
+6. Every word must serve the meaning — be direct and informative.
+7. Do NOT repeat the same word twice in the entire description.
 
 Also suggest 3-5 comma-separated Pinterest interests.
 
@@ -133,11 +153,24 @@ Return JSON object ONLY — no explanation, no markdown:
 
         const result = JSON.parse(jsonMatch[0]) as { title: string; description: string; suggestedInterests?: string };
 
-        // Clean up
-        let title = result.title.replace(/\*\*/g, "").replace(/#\w+/g, "").trim().slice(0, 100);
-        let description = result.description.replace(/\*\*/g, "").replace(/#\w+/g, "").replace(/\*/g, "").trim();
+        // Clean up title
+        let title = result.title.replace(/\*\*/g, "").replace(/#\w+/g, "").replace(/:/g, "").trim();
+        // Remove emojis from title
+        title = title.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{27BF}]|[\u{FE00}-\u{FE0F}]|[\u{1F000}-\u{1F02F}]/gu, "").trim();
+        // Deduplicate consecutive words
+        title = deduplicateWords(title);
+        // Enforce max 7 words
+        const titleWords = title.split(/\s+/);
+        if (titleWords.length > 7) {
+            title = titleWords.slice(0, 7).join(" ");
+        }
+        title = title.slice(0, 70);
 
-        // Enforce 150-300 char range
+        // Clean up description
+        let description = result.description.replace(/\*\*/g, "").replace(/#\w+/g, "").replace(/\*/g, "").trim();
+        description = deduplicateWords(description);
+
+        // Enforce 400 char max
         if (description.length > 400) {
             description = description.substring(0, 400);
             const lastSpace = description.lastIndexOf(" ");
