@@ -80,10 +80,12 @@ Return JSON array ONLY — no explanation, no markdown:
  * e.g. "Italian Sausage Sausage Recipe" → "Italian Sausage Recipe"
  */
 function deduplicateWords(text: string): string {
-    const words = text.split(/\s+/);
+    const words = text.split(/\s+/).filter(Boolean);
     const result: string[] = [];
     for (let i = 0; i < words.length; i++) {
-        if (i === 0 || words[i].toLowerCase() !== words[i - 1].toLowerCase()) {
+        const wordClean = words[i].replace(/[.,:;?!-]/g, "").toLowerCase();
+        const prevClean = i > 0 ? words[i - 1].replace(/[.,:;?!-]/g, "").toLowerCase() : "";
+        if (i === 0 || wordClean !== prevClean) {
             result.push(words[i]);
         }
     }
@@ -116,16 +118,14 @@ Target keyword: "${targetKeyword}"
 Annotated interests: "${annotatedInterests}"
 ${existingTitlesBlock}
 PIN TITLE RULES (CRITICAL — follow exactly):
-1. MAXIMUM 7 WORDS TOTAL. Count carefully. Do not exceed 7 words.
-2. START with the target keyword "${targetKeyword}" as the FIRST words of the title.
-3. After the keyword, add 2-3 descriptive words about this specific topic.
-4. NO word repetition — every word must appear only ONCE in the title.
-5. No emoji, no hashtags, no years, no ** markdown, no colons.
-6. Must be UNIQUE and DIFFERENT from every title listed above.
-7. Example good titles (if keyword is "Italian sausage recipes"):
-   - "Italian Sausage Recipes for Cozy Dinners"
-   - "Italian Sausage Recipes with Fresh Peppers"
-   - "Italian Sausage Recipes One-Pot Style"
+1. MAXIMUM 6-7 WORDS TOTAL. Short, punchy, click-worthy.
+2. START the title with the exact target keyword: "${targetKeyword}". Add a colon or dash if needed for readability (e.g. "Keto Meals: ...", "Keto Meals - ...").
+3. NO word repetition. Every word must be unique in the title.
+4. No emojis, hashtags, or years.
+5. Must be UNIQUE and DIFFERENT from every title listed above.
+6. Example good titles (if keyword is "Keto Meals"):
+   - "Keto Meals: Classic Steak & Asparagus"
+   - "Keto Meals - Easy Weeknight Dinners"
 
 PIN DESCRIPTION RULES (strict, 150-400 characters):
 1. FIRST SENTENCE: Must START with "${targetKeyword}" as the opening words.

@@ -45,32 +45,44 @@ function randomPinStyle(): PinStyleType {
 // ─── Canvas Helpers ───
 
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number = 3): string[] {
-    const words = text.split(" ");
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length === 0) return [];
+
     const lines: string[] = [];
-    let currentLine = words[0] || "";
+    let currentLine = words[0];
 
     for (let i = 1; i < words.length; i++) {
+        if (lines.length === maxLines - 1) {
+            // Building the last permitted line
+            const remainingWords = words.slice(i).join(" ");
+            const fullTest = currentLine + " " + remainingWords;
+            if (ctx.measureText(fullTest).width <= maxWidth) {
+                currentLine = fullTest;
+                break; // Everything fits, end loop
+            } else {
+                // Must truncate with ellipsis
+                let truncated = currentLine;
+                while (i < words.length) {
+                    const testWithNext = truncated + " " + words[i];
+                    if (ctx.measureText(testWithNext + "...").width <= maxWidth) {
+                        truncated = testWithNext;
+                        i++;
+                    } else {
+                        break;
+                    }
+                }
+                currentLine = truncated + "...";
+                break; // End loop
+            }
+        }
+
+        // Normal wrapping logic
         const testLine = currentLine + " " + words[i];
         if (ctx.measureText(testLine).width <= maxWidth) {
             currentLine = testLine;
         } else {
             lines.push(currentLine);
             currentLine = words[i];
-            if (lines.length >= maxLines - 1) {
-                // Last allowed line – add remaining and truncate if needed
-                const remaining = words.slice(i).join(" ");
-                if (ctx.measureText(currentLine + " " + remaining).width <= maxWidth) {
-                    currentLine = currentLine + " " + remaining;
-                } else {
-                    // Truncate
-                    while (i < words.length - 1 && ctx.measureText(currentLine + " " + words[i + 1] + "...").width <= maxWidth) {
-                        i++;
-                        currentLine += " " + words[i];
-                    }
-                    if (i < words.length - 1) currentLine += "...";
-                }
-                break;
-            }
         }
     }
     lines.push(currentLine);
@@ -161,22 +173,27 @@ function cleanupPinText(text: string): string {
     let clean = text
         .replace(/\*\*/g, "")
         .replace(/#/g, "")
-        .replace(/:/g, "")
         .replace(/\b(20\d{2})\b/g, "")
         .replace(/AI Generated/gi, "")
         .trim();
+
     // Remove ALL emojis — they render as boxes on canvas
     clean = clean.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{27BF}]|[\u{FE00}-\u{FE0F}]|[\u{1F000}-\u{1F02F}]|[\u{E000}-\u{F8FF}]/gu, "").trim();
-    // Deduplicate consecutive identical words (case-insensitive)
+
+    // Deduplicate consecutive identical words (ignoring punctuation & case)
     const words = clean.split(/\s+/).filter(Boolean);
     const deduped: string[] = [];
     for (let i = 0; i < words.length; i++) {
-        if (i === 0 || words[i].toLowerCase() !== words[i - 1].toLowerCase()) {
+        const wordClean = words[i].replace(/[.,:;?!-]/g, "").toLowerCase();
+        const prevClean = i > 0 ? words[i - 1].replace(/[.,:;?!-]/g, "").toLowerCase() : "";
+
+        if (i === 0 || wordClean !== prevClean) {
             deduped.push(words[i]);
         }
     }
-    // Limit to max 6 words for clean canvas text
-    const limited = deduped.slice(0, 6).join(" ");
+
+    // Limit to max 7 words for clean canvas text
+    const limited = deduped.slice(0, 7).join(" ");
     return limited.toUpperCase();
 }
 
@@ -218,7 +235,7 @@ async function applyPinOverlay(
                 ctx.strokeRect(12, 12, W - 24, bannerH - 24);
                 ctx.restore();
                 // MASSIVE text
-                ctx.font = "900 88px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
+                ctx.font = "900 80px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 ctx.textAlign = "center";
                 const lines = wrapText(ctx, cleanTitle, W - 100, 3);
                 const lineH = 100;
@@ -257,7 +274,7 @@ async function applyPinOverlay(
                 ctx.strokeRect(16, frameY + 40, W - 32, frameH - 56);
                 ctx.restore();
                 // MASSIVE text
-                ctx.font = "900 82px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
+                ctx.font = "900 76px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 ctx.textAlign = "center";
                 const lines2 = wrapText(ctx, cleanTitle, W - 120, 3);
                 const lineH2 = 96;
@@ -291,7 +308,7 @@ async function applyPinOverlay(
                 ctx.roundRect(overlayX + 14, overlayY + 14, overlayW - 28, overlayH - 28, 16);
                 ctx.stroke();
                 // MASSIVE text
-                ctx.font = "900 80px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
+                ctx.font = "900 72px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 ctx.textAlign = "center";
                 const lines3 = wrapText(ctx, cleanTitle, overlayW - 80, 3);
                 const lineH3 = 96;
@@ -332,7 +349,7 @@ async function applyPinOverlay(
                 ctx.ellipse(W / 2, H / 2, badgeW / 2 - 28, badgeH / 2 - 28, 0, 0, Math.PI * 2);
                 ctx.stroke();
                 // MASSIVE text
-                ctx.font = "900 72px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
+                ctx.font = "900 68px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 ctx.textAlign = "center";
                 const lines4 = wrapText(ctx, cleanTitle, badgeW - 180, 3);
                 const lineH4 = 86;
@@ -356,7 +373,7 @@ async function applyPinOverlay(
                 // Gold inset border on full pin
                 drawDecoInsetBorder(ctx, W, H, "rgba(255,215,0,0.45)", 14, 4);
                 // MASSIVE title text in banner zone
-                ctx.font = "900 84px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
+                ctx.font = "900 76px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 ctx.textAlign = "center";
                 const lines5 = wrapText(ctx, cleanTitle, W - 100, 3);
                 const lineH5 = 100;
@@ -422,7 +439,7 @@ async function applyPinOverlay(
                 ctx.fillStyle = "rgba(255,255,255,0.6)";
                 ctx.fillText("— HOW TO MAKE —", W / 2, topH + 48);
                 // MASSIVE main title
-                ctx.font = "900 90px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
+                ctx.font = "900 82px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 const splitLines = wrapText(ctx, cleanTitle, W - 80, 2);
                 const splitLineH = 105;
                 const splitStartY = topH + 80 + splitLineH;
@@ -446,7 +463,7 @@ async function applyPinOverlay(
                 ctx.fillRect(0, 0, W, H);
                 // MASSIVE sticker text — floating directly on photo
                 // Text positioned in upper 40% of the pin
-                ctx.font = "900 92px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
+                ctx.font = "900 82px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 ctx.textAlign = "center";
                 const bubbleLines = wrapText(ctx, cleanTitle, W - 100, 3);
                 const bubbleLineH = 108;
@@ -500,7 +517,7 @@ async function applyPinOverlay(
                 ctx.roundRect(badgeX8 + 10, badgeY8 + 10, badgeW8 - 20, badgeH8 - 20, 14);
                 ctx.stroke();
                 // MASSIVE text in badge
-                ctx.font = "900 72px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
+                ctx.font = "900 64px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 ctx.textAlign = "center";
                 const lines8 = wrapText(ctx, cleanTitle, badgeW8 - 100, 2);
                 const lineH8 = 84;
@@ -522,7 +539,7 @@ async function applyPinOverlay(
                 grad.addColorStop(1, "rgba(0,0,0,0.85)");
                 ctx.fillStyle = grad;
                 ctx.fillRect(0, H * 0.45, W, H * 0.55);
-                ctx.font = "900 88px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
+                ctx.font = "900 80px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 ctx.textAlign = "center";
                 const defLines = wrapText(ctx, cleanTitle, W - 100, 3);
                 const defLineH = 104;
