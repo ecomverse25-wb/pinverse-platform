@@ -44,49 +44,57 @@ function randomPinStyle(): PinStyleType {
 
 // ─── Canvas Helpers ───
 
-function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number = 3): string[] {
-    const words = text.split(/\s+/).filter(Boolean);
-    if (words.length === 0) return [];
+function getAutoFittedText(
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    maxWidth: number,
+    maxHeight: number,
+    minFontSize: number = 30,
+    maxFontSize: number = 110,
+    fontFamily: string = "'Arial Black', 'Helvetica Neue', 'Arial', sans-serif"
+): { lines: string[], fontSize: number, totalHeight: number } {
+    let bestLines: string[] = [];
+    let bestSize = minFontSize;
+    let bestHeight = 0;
 
-    const lines: string[] = [];
-    let currentLine = words[0];
+    for (let size = maxFontSize; size >= minFontSize; size -= 2) {
+        ctx.font = `900 ${size}px ${fontFamily}`;
+        const words = text.split(/\s+/).filter(Boolean);
+        if (words.length === 0) break;
 
-    for (let i = 1; i < words.length; i++) {
-        if (lines.length === maxLines - 1) {
-            // Building the last permitted line
-            const remainingWords = words.slice(i).join(" ");
-            const fullTest = currentLine + " " + remainingWords;
-            if (ctx.measureText(fullTest).width <= maxWidth) {
-                currentLine = fullTest;
-                break; // Everything fits, end loop
+        const lines: string[] = [];
+        let currentLine = words[0];
+
+        for (let i = 1; i < words.length; i++) {
+            const testLine = currentLine + " " + words[i];
+            if (ctx.measureText(testLine).width <= maxWidth) {
+                currentLine = testLine;
             } else {
-                // Must truncate with ellipsis
-                let truncated = currentLine;
-                while (i < words.length) {
-                    const testWithNext = truncated + " " + words[i];
-                    if (ctx.measureText(testWithNext + "...").width <= maxWidth) {
-                        truncated = testWithNext;
-                        i++;
-                    } else {
-                        break;
-                    }
-                }
-                currentLine = truncated + "...";
-                break; // End loop
+                lines.push(currentLine);
+                currentLine = words[i];
             }
         }
+        lines.push(currentLine);
 
-        // Normal wrapping logic
-        const testLine = currentLine + " " + words[i];
-        if (ctx.measureText(testLine).width <= maxWidth) {
-            currentLine = testLine;
-        } else {
-            lines.push(currentLine);
-            currentLine = words[i];
+        const lineH = size * 1.35;
+        const totalH = lines.length * lineH;
+
+        if (totalH <= maxHeight) {
+            bestLines = lines;
+            bestSize = size;
+            bestHeight = totalH;
+            break;
+        }
+
+        if (size === minFontSize) {
+            bestLines = lines;
+            bestSize = size;
+            bestHeight = totalH;
         }
     }
-    lines.push(currentLine);
-    return lines.slice(0, maxLines);
+
+    ctx.font = `900 ${bestSize}px ${fontFamily}`;
+    return { lines: bestLines, fontSize: bestSize, totalHeight: bestHeight };
 }
 
 async function loadImageForCanvas(url: string): Promise<HTMLImageElement> {
@@ -118,44 +126,73 @@ function drawImageCover(
     ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
 }
 
-/**
- * Draw scroll-stopping sticker text: thick dark outline + colored fill + drop shadow.
- * Mimics the high-impact Pinterest text style seen in top-performing pins.
- */
 function drawStickerText(
     ctx: CanvasRenderingContext2D,
     text: string,
     x: number, y: number,
     fillColor: string = "#FFFFFF",
     strokeColor: string = "rgba(0,0,0,0.85)",
-    strokeWidth: number = 12,
-    shadowOffset: number = 4,
+    strokeWidth: number = 18,
+    shadowOffsetY: number = 8
 ) {
     ctx.save();
     ctx.textAlign = "center";
     ctx.lineJoin = "round";
     ctx.miterLimit = 2;
 
-    // Drop shadow layer
-    ctx.fillStyle = "rgba(0,0,0,0.5)";
-    ctx.fillText(text, x + shadowOffset, y + shadowOffset);
+    // 1. Draw thick outer stroke WITH drop shadow
+    ctx.shadowColor = "rgba(0,0,0,0.65)";
+    ctx.shadowBlur = Math.max(10, shadowOffsetY * 2);
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = shadowOffsetY;
 
-    // Thick stroke outline (the "sticker" border)
     ctx.strokeStyle = strokeColor;
     ctx.lineWidth = strokeWidth;
     ctx.strokeText(text, x, y);
 
-    // Solid fill on top
+    // 2. Clear shadow for inner layers
+    ctx.shadowColor = "transparent";
+
+    // 3. Draw a subtle bright inner edge for premium glossy feel
+    ctx.strokeStyle = "rgba(255,255,255,0.7)";
+    ctx.lineWidth = Math.max(2, strokeWidth * 0.2); // inner glow
+    ctx.strokeText(text, x, y);
+
+    // 4. Solid fill on top
     ctx.fillStyle = fillColor;
     ctx.fillText(text, x, y);
 
     ctx.restore();
 }
 
-// ─── Warm Colors for Banners ───
-const WARM_COLORS = ["#C45C26", "#8B1A1A", "#B8860B", "#A0522D", "#6B3A2A", "#8B4513", "#CD5C5C", "#D2691E"];
-function randomWarmColor(): string {
-    return WARM_COLORS[Math.floor(Math.random() * WARM_COLORS.length)];
+// ─── Vibrant Gradients for Backgrounds ───
+const VIBRANT_GRADIENTS = [
+    ["#FF4E50", "#F9D423"], // Sunset
+    ["#f12711", "#f5af19"], // Fire
+    ["#833ab4", "#fd1d1d", "#fcb045"], // Instagram
+    ["#bc4e9c", "#f80759"], // Pink Flavour
+    ["#FF416C", "#FF4B2B"], // Bloody Mary
+    ["#f857a6", "#ff5858"], // Day Tripper
+    ["#e52d27", "#b31217"], // Deep Red
+    ["#e65c00", "#F9D423"], // Mango
+    ["#1e3c72", "#2a5298"], // Ocean
+    ["#11998e", "#38ef7d"], // Fresh Mint
+    ["#D31027", "#EA384D"], // Red Salsa
+    ["#C33764", "#1D2671"], // Night Space
+];
+
+function getBoxGradient(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): CanvasGradient {
+    const palette = VIBRANT_GRADIENTS[Math.floor(Math.random() * VIBRANT_GRADIENTS.length)];
+    const gradient = ctx.createLinearGradient(x, y, x + w, y + h);
+    if (palette.length === 2) {
+        gradient.addColorStop(0, palette[0]);
+        gradient.addColorStop(1, palette[1]);
+    } else {
+        gradient.addColorStop(0, palette[0]);
+        gradient.addColorStop(0.5, palette[1]);
+        gradient.addColorStop(1, palette[2]);
+    }
+    return gradient;
 }
 
 // ─── Decorative border inset ───
@@ -210,8 +247,6 @@ async function applyPinOverlay(
     canvas.height = H;
     const ctx = canvas.getContext("2d");
     if (!ctx) return imageUrl;
-
-    const bannerColor = randomWarmColor();
     const cleanTitle = cleanupPinText(title);
 
     try {
@@ -225,8 +260,8 @@ async function applyPinOverlay(
             case "top-banner": {
                 drawImageCover(ctx, img, 0, 0, W, H);
                 const bannerH = Math.floor(H * 0.35);
-                // Solid opaque banner
-                ctx.fillStyle = bannerColor;
+                // Vibrant Gradient banner
+                ctx.fillStyle = getBoxGradient(ctx, 0, 0, W, bannerH);
                 ctx.fillRect(0, 0, W, bannerH);
                 // Decorative gold inset border on banner
                 ctx.save();
@@ -235,14 +270,12 @@ async function applyPinOverlay(
                 ctx.strokeRect(12, 12, W - 24, bannerH - 24);
                 ctx.restore();
                 // MASSIVE text
-                ctx.font = "900 80px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 ctx.textAlign = "center";
-                const lines = wrapText(ctx, cleanTitle, W - 100, 3);
-                const lineH = 100;
-                const totalTextH = lines.length * lineH;
-                const startY = (bannerH - totalTextH) / 2 + 80;
+                const { lines, fontSize, totalHeight } = getAutoFittedText(ctx, cleanTitle, W - 100, bannerH - 60, 40, 90);
+                const lineH = fontSize * 1.35;
+                const startY = (bannerH - totalHeight) / 2 + fontSize * 0.9;
                 lines.forEach((line, i) => {
-                    drawStickerText(ctx, line, W / 2, startY + i * lineH, "#FFFFFF", "rgba(0,0,0,0.7)", 10, 4);
+                    drawStickerText(ctx, line, W / 2, startY + i * lineH, "#FFFFFF", "rgba(0,0,0,0.7)", fontSize * 0.2, fontSize * 0.15);
                 });
                 break;
             }
@@ -256,7 +289,7 @@ async function applyPinOverlay(
                 const frameH = Math.floor(H * 0.35);
                 const frameY = H - frameH;
                 // Scalloped/zig-zag top edge
-                ctx.fillStyle = bannerColor;
+                ctx.fillStyle = getBoxGradient(ctx, 0, frameY - 8, W, frameH + 8);
                 ctx.beginPath();
                 ctx.moveTo(0, frameY + 30);
                 for (let x = 0; x < W; x += 50) {
@@ -274,13 +307,12 @@ async function applyPinOverlay(
                 ctx.strokeRect(16, frameY + 40, W - 32, frameH - 56);
                 ctx.restore();
                 // MASSIVE text
-                ctx.font = "900 76px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 ctx.textAlign = "center";
-                const lines2 = wrapText(ctx, cleanTitle, W - 120, 3);
-                const lineH2 = 96;
-                const startY2 = frameY + 70;
-                lines2.forEach((line, i) => {
-                    drawStickerText(ctx, line, W / 2, startY2 + i * lineH2, "#FFFFFF", "rgba(0,0,0,0.6)", 8, 4);
+                const { lines, fontSize, totalHeight } = getAutoFittedText(ctx, cleanTitle, W - 120, frameH - 90, 40, 90);
+                const lineH = fontSize * 1.35;
+                const startY = frameY + 40 + (frameH - 56 - totalHeight) / 2 + fontSize * 0.9;
+                lines.forEach((line, i) => {
+                    drawStickerText(ctx, line, W / 2, startY + i * lineH, "#FFFFFF", "rgba(0,0,0,0.6)", fontSize * 0.2, fontSize * 0.15);
                 });
                 break;
             }
@@ -296,26 +328,26 @@ async function applyPinOverlay(
                 const overlayY = (H - overlayH) / 2;
                 const overlayX = 40;
                 const overlayW = W - 80;
-                // Semi-transparent warm background
-                ctx.fillStyle = "rgba(139,69,19,0.88)";
+                // Gradient background under dark wash
+                ctx.fillStyle = getBoxGradient(ctx, overlayX, overlayY, overlayW, overlayH);
                 ctx.beginPath();
                 ctx.roundRect(overlayX, overlayY, overlayW, overlayH, 24);
                 ctx.fill();
+                ctx.fillStyle = "rgba(0,0,0,0.4)";
+                ctx.fill();
                 // Decorative inner border
-                ctx.strokeStyle = "rgba(255,255,255,0.35)";
-                ctx.lineWidth = 3;
+                ctx.strokeStyle = "rgba(255,255,255,0.45)";
+                ctx.lineWidth = 4;
                 ctx.beginPath();
                 ctx.roundRect(overlayX + 14, overlayY + 14, overlayW - 28, overlayH - 28, 16);
                 ctx.stroke();
                 // MASSIVE text
-                ctx.font = "900 72px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 ctx.textAlign = "center";
-                const lines3 = wrapText(ctx, cleanTitle, overlayW - 80, 3);
-                const lineH3 = 96;
-                const totalH3 = lines3.length * lineH3;
-                const startY3 = overlayY + (overlayH - totalH3) / 2 + 70;
-                lines3.forEach((line, i) => {
-                    drawStickerText(ctx, line, W / 2, startY3 + i * lineH3, "#FFFFFF", "rgba(0,0,0,0.5)", 8, 3);
+                const { lines, fontSize, totalHeight } = getAutoFittedText(ctx, cleanTitle, overlayW - 80, overlayH - 60, 40, 90);
+                const lineH = fontSize * 1.35;
+                const startY = overlayY + (overlayH - totalHeight) / 2 + fontSize * 0.9;
+                lines.forEach((line, i) => {
+                    drawStickerText(ctx, line, W / 2, startY + i * lineH, "#FFFFFF", "rgba(0,0,0,0.5)", fontSize * 0.2, fontSize * 0.15);
                 });
                 break;
             }
@@ -327,12 +359,14 @@ async function applyPinOverlay(
                 drawImageCover(ctx, img, 0, 0, W, H);
                 const badgeW = 820;
                 const badgeH = 440;
+                const badgeX = (W - badgeW) / 2;
+                const badgeY = (H - badgeH) / 2;
                 // Decorative badge with shadow
                 ctx.save();
                 ctx.shadowColor = "rgba(0,0,0,0.6)";
                 ctx.shadowBlur = 20;
                 ctx.shadowOffsetY = 8;
-                ctx.fillStyle = "rgba(139,69,19,0.92)";
+                ctx.fillStyle = getBoxGradient(ctx, badgeX, badgeY, badgeW, badgeH);
                 ctx.beginPath();
                 ctx.ellipse(W / 2, H / 2, badgeW / 2, badgeH / 2, 0, 0, Math.PI * 2);
                 ctx.fill();
@@ -349,14 +383,12 @@ async function applyPinOverlay(
                 ctx.ellipse(W / 2, H / 2, badgeW / 2 - 28, badgeH / 2 - 28, 0, 0, Math.PI * 2);
                 ctx.stroke();
                 // MASSIVE text
-                ctx.font = "900 68px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 ctx.textAlign = "center";
-                const lines4 = wrapText(ctx, cleanTitle, badgeW - 180, 3);
-                const lineH4 = 86;
-                const totalH4 = lines4.length * lineH4;
-                const startY4 = H / 2 - totalH4 / 2 + 50;
-                lines4.forEach((line, i) => {
-                    drawStickerText(ctx, line, W / 2, startY4 + i * lineH4, "#FFFFFF", "rgba(0,0,0,0.5)", 8, 3);
+                const { lines, fontSize, totalHeight } = getAutoFittedText(ctx, cleanTitle, badgeW - 160, badgeH - 100, 40, 90);
+                const lineH = fontSize * 1.35;
+                const startY = H / 2 - totalHeight / 2 + fontSize * 0.4;
+                lines.forEach((line, i) => {
+                    drawStickerText(ctx, line, W / 2, startY + i * lineH, "#FFFFFF", "rgba(0,0,0,0.5)", fontSize * 0.2, fontSize * 0.15);
                 });
                 break;
             }
@@ -366,21 +398,19 @@ async function applyPinOverlay(
             // Like reference image 1: title banner + scattered food photos
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             case "top-title-collage": {
-                const bannerH5 = Math.floor(H * 0.30);
-                // Fill entire background with banner color
-                ctx.fillStyle = bannerColor;
+                const bannerH = Math.floor(H * 0.30);
+                // Fill entire background with vibrant gradient
+                ctx.fillStyle = getBoxGradient(ctx, 0, 0, W, H);
                 ctx.fillRect(0, 0, W, H);
                 // Gold inset border on full pin
                 drawDecoInsetBorder(ctx, W, H, "rgba(255,215,0,0.45)", 14, 4);
                 // MASSIVE title text in banner zone
-                ctx.font = "900 76px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 ctx.textAlign = "center";
-                const lines5 = wrapText(ctx, cleanTitle, W - 100, 3);
-                const lineH5 = 100;
-                const totalH5 = lines5.length * lineH5;
-                const startY5 = (bannerH5 - totalH5) / 2 + 80;
-                lines5.forEach((line, i) => {
-                    drawStickerText(ctx, line, W / 2, startY5 + i * lineH5, "#FFFFFF", "rgba(0,0,0,0.6)", 10, 4);
+                const { lines, fontSize, totalHeight } = getAutoFittedText(ctx, cleanTitle, W - 100, bannerH - 40, 40, 90);
+                const lineH = fontSize * 1.35;
+                const startY = (bannerH - totalHeight) / 2 + fontSize * 0.9;
+                lines.forEach((line, i) => {
+                    drawStickerText(ctx, line, W / 2, startY + i * lineH, "#FFFFFF", "rgba(0,0,0,0.6)", fontSize * 0.2, fontSize * 0.15);
                 });
                 // Polaroid collage in bottom section
                 const collageImages = sectionImages && sectionImages.length > 0 ? sectionImages.slice(0, 4) : [imageUrl];
@@ -389,10 +419,10 @@ async function applyPinOverlay(
                 const polaroidH = 460;
                 const border = 18;
                 const positions = [
-                    { x: 60, y: bannerH5 + 30, rot: -4 },
-                    { x: W - polaroidW - 60, y: bannerH5 + 20, rot: 3 },
-                    { x: 100, y: bannerH5 + polaroidH - 60, rot: 2 },
-                    { x: W - polaroidW - 100, y: bannerH5 + polaroidH - 80, rot: -3 },
+                    { x: 60, y: bannerH + 30, rot: -4 },
+                    { x: W - polaroidW - 60, y: bannerH + 20, rot: 3 },
+                    { x: 100, y: bannerH + polaroidH - 60, rot: 2 },
+                    { x: W - polaroidW - 100, y: bannerH + polaroidH - 80, rot: -3 },
                 ];
                 loadedImgs.forEach((pImg, idx) => {
                     if (idx >= positions.length) return;
@@ -437,14 +467,14 @@ async function applyPinOverlay(
                 ctx.font = "600 30px 'Arial', sans-serif";
                 ctx.textAlign = "center";
                 ctx.fillStyle = "rgba(255,255,255,0.6)";
-                ctx.fillText("— HOW TO MAKE —", W / 2, topH + 48);
+                ctx.fillText("— FIND FULL RECIPE —", W / 2, topH + 48);
                 // MASSIVE main title
-                ctx.font = "900 82px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
-                const splitLines = wrapText(ctx, cleanTitle, W - 80, 2);
-                const splitLineH = 105;
-                const splitStartY = topH + 80 + splitLineH;
-                splitLines.forEach((line, i) => {
-                    drawStickerText(ctx, line, W / 2, splitStartY + i * splitLineH, "#FFFFFF", "rgba(0,0,0,0.7)", 10, 4);
+                ctx.textAlign = "center";
+                const { lines, fontSize, totalHeight } = getAutoFittedText(ctx, cleanTitle, W - 80, stripH - 80, 40, 90);
+                const lineH = fontSize * 1.35;
+                const startY = topH + 60 + (stripH - 80 - totalHeight) / 2 + fontSize * 0.9;
+                lines.forEach((line, i) => {
+                    drawStickerText(ctx, line, W / 2, startY + i * lineH, "#FFFFFF", "rgba(0,0,0,0.7)", fontSize * 0.2, fontSize * 0.15);
                 });
                 break;
             }
@@ -463,16 +493,13 @@ async function applyPinOverlay(
                 ctx.fillRect(0, 0, W, H);
                 // MASSIVE sticker text — floating directly on photo
                 // Text positioned in upper 40% of the pin
-                ctx.font = "900 82px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 ctx.textAlign = "center";
-                const bubbleLines = wrapText(ctx, cleanTitle, W - 100, 3);
-                const bubbleLineH = 108;
-                const totalBubbleH = bubbleLines.length * bubbleLineH;
-                const bubbleStartY = 120 + bubbleLineH;
+                const { lines, fontSize, totalHeight } = getAutoFittedText(ctx, cleanTitle, W - 100, H * 0.45, 40, 100);
+                const lineH = fontSize * 1.35;
+                const startY = 120 + fontSize * 0.9;
                 // Extra thick stroke for the "sticker peel" effect
-                bubbleLines.forEach((line, i) => {
-                    const y = bubbleStartY + i * bubbleLineH;
-                    drawStickerText(ctx, line, W / 2, y, "#FFF5E6", "rgba(60,30,15,0.92)", 16, 5);
+                lines.forEach((line, i) => {
+                    drawStickerText(ctx, line, W / 2, startY + i * lineH, "#FFF5E6", "rgba(60,30,15,0.92)", fontSize * 0.25, fontSize * 0.15);
                 });
                 break;
             }
@@ -497,34 +524,32 @@ async function applyPinOverlay(
                     }
                 }
                 // Floating badge — larger and more prominent
-                const badgeW8 = 860;
-                const badgeH8 = 280;
-                const badgeX8 = (W - badgeW8) / 2;
-                const badgeY8 = (H - badgeH8) / 2;
+                const badgeW = 860;
+                const badgeH = 280;
+                const badgeX = (W - badgeW) / 2;
+                const badgeY = (H - badgeH) / 2;
                 ctx.save();
                 ctx.shadowColor = "rgba(0,0,0,0.6)";
                 ctx.shadowBlur = 24;
                 ctx.shadowOffsetY = 8;
-                ctx.fillStyle = bannerColor;
+                ctx.fillStyle = getBoxGradient(ctx, badgeX, badgeY, badgeW, badgeH);
                 ctx.beginPath();
-                ctx.roundRect(badgeX8, badgeY8, badgeW8, badgeH8, 20);
+                ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 20);
                 ctx.fill();
                 ctx.restore();
                 // Gold border on badge
                 ctx.strokeStyle = "rgba(255,215,0,0.5)";
                 ctx.lineWidth = 3;
                 ctx.beginPath();
-                ctx.roundRect(badgeX8 + 10, badgeY8 + 10, badgeW8 - 20, badgeH8 - 20, 14);
+                ctx.roundRect(badgeX + 10, badgeY + 10, badgeW - 20, badgeH - 20, 14);
                 ctx.stroke();
                 // MASSIVE text in badge
-                ctx.font = "900 64px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 ctx.textAlign = "center";
-                const lines8 = wrapText(ctx, cleanTitle, badgeW8 - 100, 2);
-                const lineH8 = 84;
-                const totalH8 = lines8.length * lineH8;
-                const startY8 = badgeY8 + (badgeH8 - totalH8) / 2 + 60;
-                lines8.forEach((line, i) => {
-                    drawStickerText(ctx, line, W / 2, startY8 + i * lineH8, "#FFFFFF", "rgba(0,0,0,0.5)", 8, 3);
+                const { lines, fontSize, totalHeight } = getAutoFittedText(ctx, cleanTitle, badgeW - 100, badgeH - 60, 40, 90);
+                const lineH = fontSize * 1.35;
+                const startY = badgeY + (badgeH - totalHeight) / 2 + fontSize * 0.9;
+                lines.forEach((line, i) => {
+                    drawStickerText(ctx, line, W / 2, startY + i * lineH, "#FFFFFF", "rgba(0,0,0,0.5)", fontSize * 0.2, fontSize * 0.15);
                 });
                 break;
             }
@@ -539,13 +564,12 @@ async function applyPinOverlay(
                 grad.addColorStop(1, "rgba(0,0,0,0.85)");
                 ctx.fillStyle = grad;
                 ctx.fillRect(0, H * 0.45, W, H * 0.55);
-                ctx.font = "900 80px 'Arial Black', 'Helvetica Neue', 'Arial', sans-serif";
                 ctx.textAlign = "center";
-                const defLines = wrapText(ctx, cleanTitle, W - 100, 3);
-                const defLineH = 104;
-                const defStartY = H - (defLines.length * defLineH) - 40;
-                defLines.forEach((line, i) => {
-                    drawStickerText(ctx, line, W / 2, defStartY + i * defLineH, "#FFFFFF", "rgba(0,0,0,0.7)", 10, 4);
+                const { lines, fontSize, totalHeight } = getAutoFittedText(ctx, cleanTitle, W - 100, H * 0.45, 40, 100);
+                const lineH = fontSize * 1.35;
+                const defStartY = H - totalHeight - 40 + fontSize * 0.4;
+                lines.forEach((line, i) => {
+                    drawStickerText(ctx, line, W / 2, defStartY + i * lineH, "#FFFFFF", "rgba(0,0,0,0.7)", fontSize * 0.2, fontSize * 0.15);
                 });
                 break;
             }
@@ -606,6 +630,7 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
                     pinTitle: "",
                     pinDescription: "",
                     pinStyle: randomPinStyle(),
+                    mainArticleTitle: article.title,
                 });
             }
             for (const img of article.sectionImages) {
@@ -625,6 +650,7 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
                     pinTitle: "",
                     pinDescription: "",
                     pinStyle: randomPinStyle(),
+                    mainArticleTitle: article.title,
                 });
             }
         }
@@ -672,6 +698,7 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
                     pin.pinTargetKeyword || pin.sourceArticleKeyword,
                     pin.pinAnnotatedInterests,
                     existingTitles,
+                    pin.mainArticleTitle,
                     geminiKey,
                     geminiModel || "gemini-2.5-flash",
                 );
@@ -750,6 +777,7 @@ export default function BlogMonetizerPinExport({ articles, wpBaseUrl, geminiKey,
                 pin.pinTargetKeyword || pin.sourceArticleKeyword,
                 pin.pinAnnotatedInterests,
                 existingTitles,
+                pin.mainArticleTitle,
                 geminiKey,
                 geminiModel || "gemini-2.5-flash",
             );

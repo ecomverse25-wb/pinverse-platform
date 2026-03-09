@@ -102,6 +102,7 @@ export async function generateSinglePinTextAction(
     targetKeyword: string,
     annotatedInterests: string,
     existingTitles: string[],
+    mainArticleTitle: string,
     geminiKey: string,
     geminiModel: string = "gemini-2.5-flash",
 ): Promise<{ success: boolean; title?: string; description?: string; suggestedInterests?: string; error?: string }> {
@@ -116,25 +117,23 @@ export async function generateSinglePinTextAction(
 Topic: "${sectionHeading}"
 Target keyword: "${targetKeyword}"
 Annotated interests: "${annotatedInterests}"
+Main Article Title: "${mainArticleTitle}" (DO NOT REPEAT THIS EXACT TITLE)
 ${existingTitlesBlock}
 PIN TITLE RULES (CRITICAL — follow exactly):
-1. MAXIMUM 6-7 WORDS TOTAL. Short, punchy, click-worthy.
-2. START the title with the exact target keyword: "${targetKeyword}". Add a colon or dash if needed for readability (e.g. "Keto Meals: ...", "Keto Meals - ...").
-3. NO word repetition. Every word must be unique in the title.
-4. No emojis, hashtags, or years.
-5. Must be UNIQUE and DIFFERENT from every title listed above.
-6. Example good titles (if keyword is "Keto Meals"):
-   - "Keto Meals: Classic Steak & Asparagus"
-   - "Keto Meals - Easy Weeknight Dinners"
+1. MAXIMUM 70 CHARACTERS. Short, catchy, click-worthy.
+2. MUST include the exact target keyword: "${targetKeyword}" naturally. It does not need to be at the very beginning anymore, but it must be included seamlessly and creatively.
+3. NO word repetition.
+4. DO NOT repeat the Main Article Title. Create a fresh, related angle.
+5. No emojis, hashtags, or years.
+6. Must be UNIQUE and DIFFERENT from every title listed above.
 
-PIN DESCRIPTION RULES (strict, 150-400 characters):
-1. FIRST SENTENCE: Must START with "${targetKeyword}" as the opening words.
-2. ANNOTATED INTERESTS: Naturally weave in 4-5 of these interests: "${annotatedInterests}". Explain them in context — do not just list them.
-3. LENGTH: 150-400 characters. 2-3 natural sentences.
-4. NO padding, no filler phrases like "Click to learn" or "Save this pin" or "Check out".
+PIN DESCRIPTION RULES (strict, 300-400 characters):
+1. ANNOTATED INTERESTS: Naturally weave in 4-5 of these interests: "${annotatedInterests}" in context. Do not just list them.
+2. LENGTH: 300-400 characters. Give enough detail and context.
+3. NO REPEATED KEYWORDS: You CANNOT repeat any primary keyword/interest more than twice in the entire description. Use semantic variations or synonyms if needed.
+4. NO padding, no filler phrases like "Click to learn" or "Save this pin" or "Here are the best".
 5. NO HASHTAGS, NO MARKDOWN, NO YEARS.
-6. Every word must serve the meaning — be direct and informative.
-7. Do NOT repeat the same word twice in the entire description.
+6. Make it conversational but highly informative and solution-oriented.
 
 Also suggest 3-5 comma-separated Pinterest interests.
 

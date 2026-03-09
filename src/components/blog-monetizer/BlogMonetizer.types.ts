@@ -178,6 +178,7 @@ export interface PinData {
     pinTitle: string;
     pinDescription: string;
     pinStyle: PinStyleType;
+    mainArticleTitle: string;
 }
 
 export interface WPCredentials {
