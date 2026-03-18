@@ -43,6 +43,10 @@ interface SetupTabProps {
     settings: FoodSeoSettings;
     updateSettings: (patch: Partial<FoodSeoSettings>) => void;
     updateFeaturedImage: (patch: Partial<FeaturedImageSettings>) => void;
+    geminiKey: string; setGeminiKey: (v: string) => void;
+    replicateKey: string; setReplicateKey: (v: string) => void;
+    anthropicKey: string; setAnthropicKey: (v: string) => void;
+    openaiKey: string; setOpenaiKey: (v: string) => void;
     imgbbKey: string; setImgbbKey: (v: string) => void;
     writingProvider: WritingProvider; setWritingProvider: (v: WritingProvider) => void;
     writingModel: string; setWritingModel: (v: string) => void;
@@ -75,6 +79,8 @@ interface SetupTabProps {
 export default function SetupTab(props: SetupTabProps) {
     const {
         settings, updateSettings, updateFeaturedImage,
+        geminiKey, setGeminiKey, replicateKey, setReplicateKey,
+        anthropicKey, setAnthropicKey, openaiKey, setOpenaiKey,
         imgbbKey, setImgbbKey,
         writingProvider, setWritingProvider, writingModel, setWritingModel,
         imageProvider, setImageProvider, imageModel, setImageModel,
@@ -88,6 +94,31 @@ export default function SetupTab(props: SetupTabProps) {
         onGenerateTitles, onRegenerateTitle, onRemoveKeyword, onToggleAll,
         onTestImageApi, onGenerate, saveLS,
     } = props;
+
+    // ─── API Key Visibility Logic ───
+    const showGeminiKey = writingProvider === 'google' || imageProvider === 'google-imagen';
+    const showReplicateKey = writingProvider === 'replicate' || imageProvider === 'replicate';
+    const showAnthropicKey = writingProvider === 'claude';
+    const showOpenaiKey = writingProvider === 'openai';
+
+    // Is the key shared between writing + image provider?
+    const geminiShared = writingProvider === 'google' && imageProvider === 'google-imagen';
+    const replicateShared = writingProvider === 'replicate' && imageProvider === 'replicate';
+
+    // Which keys are needed only for writing vs only for images?
+    const geminiForImageOnly = writingProvider !== 'google' && imageProvider === 'google-imagen';
+    const replicateForImageOnly = writingProvider !== 'replicate' && imageProvider === 'replicate';
+
+    // Validation: which required keys are missing?
+    const missingWritingKey =
+        (writingProvider === 'google' && !geminiKey) ? 'Gemini' :
+        (writingProvider === 'replicate' && !replicateKey) ? 'Replicate' :
+        (writingProvider === 'claude' && !anthropicKey) ? 'Anthropic' :
+        (writingProvider === 'openai' && !openaiKey) ? 'OpenAI' : null;
+
+    const missingImageKey =
+        (imageProvider === 'google-imagen' && !geminiKey) ? 'Gemini' :
+        (imageProvider === 'replicate' && !replicateKey) ? 'Replicate' : null;
 
     // ─── Keyword Intelligence State ───
     const [csvData, setCsvData] = useState<KeywordData[]>([]);
@@ -197,6 +228,44 @@ export default function SetupTab(props: SetupTabProps) {
                         </div>
                     </div>
 
+                {/* Writing provider API key */}
+                {writingProvider === 'google' && !geminiForImageOnly && (
+                    <div style={{ marginBottom: 12 }}>
+                        <label style={labelStyle}>Gemini API Key {geminiShared && <span style={{ color: '#10b981', fontSize: 11 }}>(shared with Google Imagen images)</span>}</label>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <input type="password" value={geminiKey} onChange={e => setGeminiKey(e.target.value)} placeholder="Gemini API key..." style={{ ...inputStyle, flex: 1 }} />
+                            <button onClick={() => onSaveApiKey('gemini', geminiKey)} style={secondaryBtnStyle}>💾</button>
+                        </div>
+                    </div>
+                )}
+                {writingProvider === 'replicate' && !replicateForImageOnly && (
+                    <div style={{ marginBottom: 12 }}>
+                        <label style={labelStyle}>Replicate API Key {replicateShared && <span style={{ color: '#10b981', fontSize: 11 }}>(shared with Replicate images)</span>}</label>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <input type="password" value={replicateKey} onChange={e => setReplicateKey(e.target.value)} placeholder="Replicate API key..." style={{ ...inputStyle, flex: 1 }} />
+                            <button onClick={() => onSaveApiKey('replicate', replicateKey)} style={secondaryBtnStyle}>💾</button>
+                        </div>
+                    </div>
+                )}
+                {showAnthropicKey && (
+                    <div style={{ marginBottom: 12 }}>
+                        <label style={labelStyle}>Anthropic API Key</label>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <input type="password" value={anthropicKey} onChange={e => setAnthropicKey(e.target.value)} placeholder="Anthropic API key..." style={{ ...inputStyle, flex: 1 }} />
+                            <button onClick={() => onSaveApiKey('anthropic', anthropicKey)} style={secondaryBtnStyle}>💾</button>
+                        </div>
+                    </div>
+                )}
+                {showOpenaiKey && (
+                    <div style={{ marginBottom: 12 }}>
+                        <label style={labelStyle}>OpenAI API Key</label>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <input type="password" value={openaiKey} onChange={e => setOpenaiKey(e.target.value)} placeholder="OpenAI API key..." style={{ ...inputStyle, flex: 1 }} />
+                            <button onClick={() => onSaveApiKey('openai', openaiKey)} style={secondaryBtnStyle}>💾</button>
+                        </div>
+                    </div>
+                )}
+
                 <hr style={{ border: "none", borderTop: "1px solid #334155", margin: "16px 0" }} />
 
                 {/* Image Provider */}
@@ -242,22 +311,51 @@ export default function SetupTab(props: SetupTabProps) {
                                 </div>
                             )}
                         </div>
-                        <div>
-                            {/* Restored API keys are no longer rendering here. We rely on FoodSeoWriter holding them or DB directly. */}
-                        </div>
                     </div>
                 </div>
+
+                {/* Image provider API key — only if different from writing provider */}
+                {geminiForImageOnly && (
+                    <div style={{ marginBottom: 12 }}>
+                        <label style={labelStyle}>Gemini API Key <span style={{ color: '#f59e0b', fontSize: 11 }}>(required for Google Imagen images)</span></label>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <input type="password" value={geminiKey} onChange={e => setGeminiKey(e.target.value)} placeholder="Gemini API key for images..." style={{ ...inputStyle, flex: 1 }} />
+                            <button onClick={() => onSaveApiKey('gemini', geminiKey)} style={secondaryBtnStyle}>💾</button>
+                        </div>
+                    </div>
+                )}
+                {replicateForImageOnly && (
+                    <div style={{ marginBottom: 12 }}>
+                        <label style={labelStyle}>Replicate API Key <span style={{ color: '#f59e0b', fontSize: 11 }}>(required for Replicate images)</span></label>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <input type="password" value={replicateKey} onChange={e => setReplicateKey(e.target.value)} placeholder="Replicate API key for images..." style={{ ...inputStyle, flex: 1 }} />
+                            <button onClick={() => onSaveApiKey('replicate', replicateKey)} style={secondaryBtnStyle}>💾</button>
+                        </div>
+                    </div>
+                )}
 
                 <hr style={{ border: "none", borderTop: "1px solid #334155", margin: "16px 0" }} />
 
                 {/* ImgBB */}
-                <div>
+                <div style={{ marginBottom: 12 }}>
                     <label style={labelStyle}>ImgBB API Key <span style={{ color: "#64748b", fontSize: 11 }}>(permanent image hosting)</span></label>
                     <div style={{ display: "flex", gap: 8 }}>
                         <input type="password" value={imgbbKey} onChange={e => setImgbbKey(e.target.value)} placeholder="ImgBB key..." style={{ ...inputStyle, flex: 1 }} />
                         <button onClick={() => onSaveApiKey("imgbb", imgbbKey)} style={secondaryBtnStyle}>💾</button>
                     </div>
                 </div>
+
+                {/* Validation error banners */}
+                {missingWritingKey && (
+                    <div style={{ padding: 8, background: '#ef444420', border: '1px solid #ef4444', borderRadius: 8, marginBottom: 8 }}>
+                        <p style={{ color: '#ef4444', fontSize: 13, margin: 0 }}>❌ {missingWritingKey} API key is required for writing</p>
+                    </div>
+                )}
+                {missingImageKey && !(missingWritingKey && missingImageKey === missingWritingKey) && (
+                    <div style={{ padding: 8, background: '#ef444420', border: '1px solid #ef4444', borderRadius: 8, marginBottom: 8 }}>
+                        <p style={{ color: '#ef4444', fontSize: 13, margin: 0 }}>❌ {missingImageKey} API key is required for image generation</p>
+                    </div>
+                )}
             </div>
 
             {/* ── SEO Strategy Settings ── */}

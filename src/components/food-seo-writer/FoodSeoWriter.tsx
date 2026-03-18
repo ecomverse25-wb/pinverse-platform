@@ -417,6 +417,10 @@ export default function FoodSeoWriter() {
                     settings={settings}
                     updateSettings={updateSettings}
                     updateFeaturedImage={updateFeaturedImage}
+                    geminiKey={geminiKey} setGeminiKey={setGeminiKey}
+                    replicateKey={replicateKey} setReplicateKey={setReplicateKey}
+                    anthropicKey={anthropicKey} setAnthropicKey={setAnthropicKey}
+                    openaiKey={openaiKey} setOpenaiKey={setOpenaiKey}
                     imgbbKey={imgbbKey} setImgbbKey={setImgbbKey}
                     writingProvider={writingProvider} setWritingProvider={setWritingProvider}
                     writingModel={writingModel} setWritingModel={setWritingModel}
