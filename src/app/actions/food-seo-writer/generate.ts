@@ -1,0 +1,520 @@
+"use server";
+
+import { GoogleGenAI } from "@google/genai";
+import { headers } from "next/headers";
+
+const rateLimits = new Map<string, { count: number; resetTime: number }>();
+export async function checkRateLimit() {
+    const headersList = await headers();
+    const ip = headersList.get("x-forwarded-for") || "unknown";
+    const now = Date.now();
+    const limit = rateLimits.get(ip);
+    if (!limit || now > limit.resetTime) {
+        rateLimits.set(ip, { count: 1, resetTime: now + 60000 });
+        return true;
+    }
+    if (limit.count >= 10) return false;
+    limit.count++;
+    return true;
+}
+import type { WritingProvider } from "@/components/blog-monetizer/BlogMonetizer.types";
+import type {
+    FoodTone, FoodH2Count, TitleFormula, SchemaType, AuthoritySource, FaqCount,
+} from "@/components/food-seo-writer/types";
+import { generateWithClaude } from "@/app/actions/blog-monetizer/generate-claude";
+import { generateWithOpenAI } from "@/app/actions/blog-monetizer/generate-openai";
+import { TITLE_FORMULA_DESCRIPTIONS, AUTHORITY_SOURCE_URLS, STRATEGY_DEFAULTS } from "@/components/food-seo-writer/constants";
+
+// (Re-exports removed: Turbopack blocks re-exporting non-async items from a 'use server' file)
+
+// ─── Replicate Text Generation ───
+
+async function generateWithReplicate(prompt: string, replicateApiKey: string, model: string): Promise<string> {
+    const response = await fetch(`https://api.replicate.com/v1/models/${model}/predictions`, {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${replicateApiKey}`,
+            "Content-Type": "application/json",
+            "Prefer": "wait",
+        },
+        body: JSON.stringify({ input: { prompt } }),
+    });
+
+    if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        throw new Error(`Replicate API error ${response.status}: ${errText}`);
+    }
+
+    const prediction = await response.json();
+
+    if (prediction.status === "succeeded" && prediction.output) {
+        return Array.isArray(prediction.output) ? prediction.output.join("") : prediction.output;
+    }
+
+    const predictionId = prediction.id;
+    let attempts = 0;
+    const maxAttempts = 90;
+    while (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const statusResponse = await fetch(
+            `https://api.replicate.com/v1/predictions/${predictionId}`,
+            { headers: { "Authorization": `Bearer ${replicateApiKey}` } }
+        );
+        const statusData = await statusResponse.json();
+
+        if (statusData.status === "succeeded") {
+            return Array.isArray(statusData.output) ? statusData.output.join("") : statusData.output;
+        }
+        if (statusData.status === "failed" || statusData.status === "canceled") {
+            throw new Error(`Replicate prediction ${statusData.status}: ${statusData.error || "Unknown error"}`);
+        }
+        attempts++;
+    }
+    throw new Error("Replicate prediction timed out");
+}
+
+// ─── Provider Router ───
+
+interface ProviderConfig {
+    writingProvider: WritingProvider;
+    writingModel: string;
+}
+
+async function generateTextWithProvider(prompt: string, config: ProviderConfig): Promise<string> {
+    switch (config.writingProvider) {
+        case "google": {
+            const apiKey = process.env.GEMINI_API_KEY;
+            if (!apiKey) throw new Error("Gemini configuration error.");
+            const ai = new GoogleGenAI({ apiKey });
+            const response = await ai.models.generateContent({
+                model: config.writingModel,
+                contents: { parts: [{ text: prompt }] },
+            });
+            const text = response.text?.trim();
+            if (!text) throw new Error("No output generated.");
+            return text;
+        }
+        case "claude": {
+            const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+            if (!anthropicApiKey) throw new Error("Anthropic configuration error.");
+            return generateWithClaude({ prompt, anthropicApiKey, model: config.writingModel });
+        }
+        case "openai": {
+            const openaiApiKey = process.env.OPENAI_API_KEY;
+            if (!openaiApiKey) throw new Error("OpenAI configuration error.");
+            return generateWithOpenAI({ prompt, openaiApiKey, model: config.writingModel });
+        }
+        case "replicate": {
+            const replicateApiKey = process.env.REPLICATE_API_KEY;
+            if (!replicateApiKey) throw new Error("Replicate configuration error.");
+            return generateWithReplicate(prompt, replicateApiKey, config.writingModel);
+        }
+        default:
+            throw new Error(`Unknown writing provider: ${config.writingProvider}`);
+    }
+}
+
+// ─── Generate Bulk Titles ───
+
+function sanitizeArticleTitle(title: string): string {
+    return title.replace(/\b(202[0-9]|203[0-5])\b/g, "").trim()
+        .replace(/\s+/g, " ")
+        .replace(/[,\s]+$/, "")
+        .trim();
+}
+
+export async function generateFoodBulkTitlesAction(
+    keywords: string[],
+    tone: FoodTone,
+    niche: string,
+    titleFormula: TitleFormula,
+    h2Count: FoodH2Count,
+    model: string = "gemini-2.5-flash",
+    writingProvider: WritingProvider = "google"
+): Promise<{ success?: boolean; titles?: { keyword: string; title: string }[]; error?: string }> {
+    if (!(await checkRateLimit())) return { error: "Rate limit exceeded. Please try again later." };
+    if (keywords.length === 0) return { error: "No keywords provided." };
+    niche = niche.substring(0, 100).trim();
+
+    const keywordsList = keywords.map((k, i) => `${i + 1}. ${k.substring(0, 200).trim()}`).join("\n");
+    const formulaDesc = TITLE_FORMULA_DESCRIPTIONS[titleFormula];
+
+    const prompt = `For each keyword below, generate one compelling food blog article title.
+
+Title Formula to use: ${formulaDesc}
+
+Rules:
+- Title must include or strongly relate to the keyword
+- Use the exact title formula pattern specified above
+- Title must be click-worthy for Pinterest and Google
+- Max 60 characters per title
+- Match tone: ${tone}
+- Match niche: ${niche}
+- If the formula includes a number, use ${h2Count} as the number
+
+STRICT TITLE RULES:
+✅ DO: Follow the title formula pattern exactly
+✅ DO: Include sensory or emotional food words: Easy, Delicious, Quick, Healthy, Amazing
+✅ DO: Include a benefit or promise in the title
+✅ DO: Keep it under 60 characters for Google title tag
+
+❌ DO NOT: Include any year numbers (2024, 2025, 2026, etc.)
+❌ DO NOT: Use the keyword alone as the full title
+❌ DO NOT: Use clickbait or exaggerated claims
+❌ DO NOT: Start with "The" every time — vary the structure
+
+Keywords:
+${keywordsList}
+
+Return JSON array only, no markdown, no code fences:
+[
+  { "keyword": "example keyword", "title": "Generated Title Here" }
+]`;
+
+    try {
+        const config: ProviderConfig = {
+            writingProvider, writingModel: model,
+        };
+        const text = await generateTextWithProvider(prompt, config);
+        const cleaned = text.replace(/```json\s*/gi, "").replace(/```/g, "").trim();
+        const parsed = JSON.parse(cleaned);
+        const sanitizedTitles = parsed.map((item: { keyword: string; title: string }) => ({
+            ...item,
+            title: sanitizeArticleTitle(item.title),
+        }));
+        return { success: true, titles: sanitizedTitles };
+    } catch (error: unknown) {
+        console.error("Food bulk title generation error:", error);
+        return { error: "Failed to generate titles. Please try again or check AI status." };
+    }
+}
+
+// ─── Generate Single Title ───
+
+export async function generateFoodSingleTitleAction(
+    keyword: string,
+    tone: FoodTone,
+    niche: string,
+    titleFormula: TitleFormula,
+    h2Count: FoodH2Count,
+    model?: string,
+    writingProvider?: WritingProvider
+): Promise<{ success?: boolean; title?: string; error?: string }> {
+    const result = await generateFoodBulkTitlesAction(
+        [keyword], tone, niche, titleFormula, h2Count,
+        model, writingProvider
+    );
+    if (result.success && result.titles && result.titles.length > 0) {
+        return { success: true, title: result.titles[0].title };
+    }
+    return { error: result.error || "Failed to generate title." };
+}
+
+// ─── Generate Full Food SEO Article ───
+
+export async function generateFoodArticleAction(
+    title: string,
+    keyword: string,
+    niche: string,
+    tone: FoodTone,
+    contentStrategy: 'pillar' | 'cluster',
+    h2Count: FoodH2Count,
+    titleFormula: TitleFormula,
+    schemaType: SchemaType,
+    authoritySource: AuthoritySource,
+    faqCount: FaqCount,
+    internalLinkTopics: string,
+    affiliateLinksText: string,
+    model: string = "gemini-2.5-flash",
+    writingProvider: WritingProvider = "google"
+): Promise<{
+
+    success?: boolean;
+    content?: string;
+    title?: string;
+    metaDescription?: string;
+    pinTitle?: string;
+    pinDescription?: string;
+    schemaMarkup?: string;
+    wordCount?: number;
+    error?: string;
+
+}> {
+    if (!(await checkRateLimit())) return { error: "Rate limit exceeded. Please try again later." };
+    title = title.substring(0, 200).trim();
+    keyword = keyword.substring(0, 200).trim();
+    niche = niche.substring(0, 100).trim();
+    internalLinkTopics = (internalLinkTopics || "").trim();
+    affiliateLinksText = (affiliateLinksText || "").trim();
+
+    const wordTarget = STRATEGY_DEFAULTS[contentStrategy].wordTarget;
+    const formulaDesc = TITLE_FORMULA_DESCRIPTIONS[titleFormula];
+    const authorityUrl = AUTHORITY_SOURCE_URLS[authoritySource];
+    const authorityLabel = authoritySource === 'auto-select' ? 'a reputable nutrition authority (USDA, Harvard Health, Mayo Clinic, etc.)' : authoritySource;
+
+    const schemaInstructions = schemaType === 'auto-detect'
+        ? 'Auto-detect the best schema type based on the content (ItemList for listicles, HowTo for step-by-step guides, Recipe for single recipe posts, Article for general food content)'
+        : `Use ${schemaType} schema type`;
+
+    const prompt = `You are an expert food blog SEO writer who creates content that ranks on Google AND gets saved on Pinterest simultaneously.
+
+INPUTS:
+- Blog Niche: ${niche}
+- Focus Keyword: ${keyword}
+- Content Strategy: ${contentStrategy} (${contentStrategy === 'pillar' ? 'Broad keyword, 2000+ words, targets category-level traffic' : 'Long-tail keyword, 1200-1500 words, targets specific searches'})
+- Title Formula: ${formulaDesc}
+- Article Tone: ${tone}
+- H2 Sections: ${h2Count}
+- Schema Type: ${schemaInstructions}
+- Authority Source: ${authorityLabel}${authorityUrl ? ` (${authorityUrl})` : ''}
+- FAQ Count: ${faqCount}
+- Internal Link Topics: ${internalLinkTopics || 'None provided'}
+- Affiliate Products: ${affiliateLinksText || 'None provided'}
+- Word Count Target: ~${wordTarget} words
+
+STRICT OUTPUT STRUCTURE — follow this EXACTLY:
+
+First, output these labeled fields at the TOP, each on its own line:
+[PIN_TITLE]: Generate a Pinterest pin title. Max 100 characters. Keyword-first: "${keyword}: [Emotional Hook]"
+[PIN_DESCRIPTION]: 400-500 characters. Include focus keyword "${keyword}" 2-3 times naturally. End with: "Save this for later! #${keyword.replace(/\s+/g, '')} #${niche.replace(/\s+/g, '')} #food"
+[META_DESCRIPTION]: Exactly 150-155 characters. Must contain exact focus keyword "${keyword}". Format: [Hook with keyword] + [What reader gets] + [CTA]
+
+Then output ##TITLE## marker:
+##TITLE##Your SEO Title Here##TITLE##
+
+Rules for SEO title:
+- Generate using the title formula: ${formulaDesc}
+- Focus keyword "${keyword}" must appear within first 60 chars
+- Max 60 characters for Google title tag
+- Emotionally compelling, listicle-forward for food content
+- No clickbait, must deliver on the promise
+- If formula includes a number, use ${h2Count}
+
+Then write the full article as HTML:
+
+Start with <h1>Your SEO Title Here</h1> (same title from above)
+
+INTRODUCTION (150-200 words):
+- First sentence MUST contain exact keyword "${keyword}"
+- Use Problem → Agitate → Solve structure
+- NO filler openers like "Are you looking for..." or "In this article we will..."
+- Personal, relatable tone — write as a home cook, not a food scientist
+- End intro with a preview of what reader will find
+
+H2 SECTIONS (write exactly ${h2Count} sections):
+- Each H2 must work as a standalone Pinterest pin title
+- Format: "[Recipe/Item Name] — [Benefit or Time Hook]"
+- Example: "Sheet Pan Lemon Herb Chicken — Ready in 25 Minutes"
+- Include "${keyword}" or semantic variant in at least 3 of the H2 headings
+- Each section: minimum 120 words
+- Include sensory language (taste, smell, texture, color)
+- Bold 1 key phrase per section using <strong> tags
+- End each section with a practical tip or variation
+
+IMAGE PLACEHOLDERS:
+- After each H2, insert: <!-- IMAGE: [descriptive scene] - ${keyword} [context] -->
+- Alt text must contain focus keyword or semantic variant
+
+INTERNAL LINKS (insert 2-3 total):
+- Place naturally within paragraph text
+- Format: <!-- INTERNAL LINK: {related_topic} | anchor: [anchor text] -->
+- Use topics from the internal link topics provided
+- Anchor text must be descriptive (never "click here")
+
+AFFILIATE LINKS:
+- Insert after benefit statements, never before
+- Max 1 per H2 section
+- Use contextual anchor text matching product benefit
+
+EXTERNAL LINK (insert exactly 1):
+- Place in the final third of the article
+- Use ${authorityLabel}${authorityUrl ? ` (${authorityUrl})` : ''}
+- Must be DoFollow (no rel="nofollow")
+- Anchor text should name the source
+
+FAQ SECTION (mandatory, ${faqCount} questions):
+Title: <h2>Frequently Asked Questions About ${keyword}</h2>
+- Each question must match Google "People Also Ask" format
+- Questions must contain semantic variants of "${keyword}"
+- Answer length: 40-60 words each
+- Conversational, direct answers
+- Use <h3> for each question, <p> for answer
+
+CONCLUDING PARAGRAPH (100-150 words):
+- Restate the focus keyword naturally
+- Include a call-to-save for Pinterest: "Save this post for your next meal planning session!"
+- Link back to one internal category page
+
+KEYWORD DENSITY RULES:
+- Target: 0.5%-1.5% (Rank Math optimal)
+- No keyword stuffing, natural placement only
+
+CONTENT QUALITY REQUIREMENTS:
+- No passive voice in headings
+- Flesch Reading Ease: 60-70 (conversational)
+- Short paragraphs: 2-3 sentences maximum
+- No filler phrases: "In conclusion", "As you can see", "It's worth noting", "Without further ado"
+- E-E-A-T signal: include 1 personal experience statement
+- Sensory language in every food description
+
+After the article body, generate the schema markup:
+[SCHEMA_START]
+Generate appropriate JSON-LD based on schema type.
+${schemaType === 'ItemList' || schemaType === 'auto-detect' ? `
+If ItemList:
+{
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  "name": "[SEO Title]",
+  "description": "[Meta Description]",
+  "numberOfItems": ${h2Count},
+  "itemListElement": [array of ListItem objects with position, name, description]
+}` : ''}
+${schemaType === 'HowTo' || schemaType === 'auto-detect' ? `
+If HowTo:
+{
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  "name": "[SEO Title]",
+  "description": "[Meta Description]",
+  "step": [array of HowToStep objects]
+}` : ''}
+${schemaType === 'Recipe' || schemaType === 'auto-detect' ? `
+If Recipe:
+{
+  "@context": "https://schema.org",
+  "@type": "Recipe",
+  "name": "[SEO Title]",
+  "description": "[Meta Description]"
+}` : ''}
+${schemaType === 'Article' || schemaType === 'auto-detect' ? `
+If Article:
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "[SEO Title]",
+  "description": "[Meta Description]",
+  "keywords": "[keyword], [semantic variants]"
+}` : ''}
+[SCHEMA_END]
+
+OUTPUT FORMAT:
+Return clean HTML with:
+- <h1> for SEO title
+- <h2> for main sections
+- <h3> for FAQ questions and sub-sections
+- <p> for paragraphs
+- <strong> for key bolded phrases
+- <!-- IMAGE: --> comments for image placeholders
+- <!-- INTERNAL LINK: --> comments for internal links
+- Schema JSON-LD between [SCHEMA_START] and [SCHEMA_END] markers
+
+Do NOT wrap in code fences. Do NOT include <html>, <head>, or <body> tags.`;
+
+    try {
+        const config: ProviderConfig = {
+            writingProvider, writingModel: model,
+        };
+        let text = await generateTextWithProvider(prompt, config);
+
+        // Strip code fences if present
+        text = text.replace(/```html\s*/gi, "").replace(/```/g, "").trim();
+
+        // Extract labeled fields from top
+        let pinTitle = "";
+        let pinDescription = "";
+        let metaDescription = "";
+
+        const pinTitleMatch = text.match(/\[PIN_TITLE\]:\s*(.+)/i);
+        if (pinTitleMatch) {
+            pinTitle = pinTitleMatch[1].trim();
+        }
+
+        // PIN_DESCRIPTION may be multi-line, so use lookahead for [META_DESCRIPTION]
+        const pinDescMatch = text.match(/\[PIN_DESCRIPTION\]:\s*([\s\S]+?)(?=\[META_DESCRIPTION\])/i);
+        if (pinDescMatch) {
+            pinDescription = pinDescMatch[1].trim();
+        } else {
+            // Fallback: single-line match
+            const pinDescSingle = text.match(/\[PIN_DESCRIPTION\]:\s*(.+)/i);
+            if (pinDescSingle) {
+                pinDescription = pinDescSingle[1].trim();
+            }
+        }
+
+        const metaMatch = text.match(/\[META_DESCRIPTION\]:\s*(.+)/i);
+        if (metaMatch) {
+            metaDescription = metaMatch[1].trim();
+        }
+
+        // Fallback: try old META_DESCRIPTION format
+        if (!metaDescription) {
+            const metaMatch2 = text.match(/META_DESCRIPTION:\s*(.+)/i);
+            if (metaMatch2) {
+                metaDescription = metaMatch2[1].trim();
+            }
+        }
+
+        // Strip the entire header fields block (PIN_TITLE through META_DESCRIPTION) from article body
+        text = text
+            .replace(/\[PIN_TITLE\]:[\s\S]*?\[META_DESCRIPTION\]:.+\n?/i, '')
+            .trim();
+
+        // Extract schema markup
+        let schemaMarkup = "";
+        const schemaMatch = text.match(/\[SCHEMA_START\]([\s\S]*?)\[SCHEMA_END\]/i);
+        if (schemaMatch) {
+            schemaMarkup = schemaMatch[1].trim();
+            // Try to extract just the JSON from the schema block
+            const jsonMatch = schemaMarkup.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                schemaMarkup = jsonMatch[0].trim();
+            }
+            text = text.replace(/\[SCHEMA_START\][\s\S]*?\[SCHEMA_END\]/i, "").trim();
+        }
+
+        // Extract title
+        let articleTitle = keyword;
+        let articleContent = text;
+
+        const titleMatch = text.match(/##TITLE##(.+?)##TITLE##/);
+        if (titleMatch) {
+            articleTitle = titleMatch[1]
+                .trim()
+                .replace(/\b(202[0-9]|203[0-5])\b/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            articleContent = text.replace(/##TITLE##.+?##TITLE##\n?/, '').trim();
+        }
+
+        // Fallback if title === keyword
+        if (articleTitle.toLowerCase() === keyword.toLowerCase()) {
+            const h1Match = articleContent.match(/<h1[^>]*>(.*?)<\/h1>/i);
+            if (h1Match) {
+                articleTitle = h1Match[1].replace(/<[^>]*>/g, "").trim();
+            }
+            if (articleTitle.toLowerCase() === keyword.toLowerCase()) {
+                articleTitle = `The Complete Guide to ${keyword}`;
+            }
+        }
+
+        console.log(`[FOOD-SEO] Extracted title: "${articleTitle}" for keyword: "${keyword}"`);
+
+        // Count words
+        const wordCount = articleContent.replace(/<[^>]*>/g, " ").split(/\s+/).filter(Boolean).length;
+
+        return {
+            success: true,
+            content: articleContent,
+            title: articleTitle,
+            metaDescription,
+            pinTitle,
+            pinDescription,
+            schemaMarkup,
+            wordCount,
+        };
+    } catch (error: unknown) {
+        console.error("Food article generation error:", error);
+        return { error: "Failed to generate article. Please try again or check AI provider availability." };
+    }
+}
