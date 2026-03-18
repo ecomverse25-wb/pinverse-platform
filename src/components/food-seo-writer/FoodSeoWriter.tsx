@@ -361,13 +361,13 @@ export default function FoodSeoWriter() {
     // ─── Test Image API ───
     const handleTestImageApi = useCallback(async () => {
         setTestImageResult({ status: 'testing' });
-        const result = await testImageProviderAction(imageProvider, imageModel, "", "");
+        const result = await testImageProviderAction(imageProvider, imageModel, geminiKey, replicateKey);
         if (result.success && result.imageUrl) {
             setTestImageResult({ status: 'success', url: result.imageUrl });
         } else {
             setTestImageResult({ status: 'error', error: result.error || "Unknown error" });
         }
-    }, [imageProvider, imageModel]);
+    }, [imageProvider, imageModel, geminiKey, replicateKey]);
 
     // ─── Tab Navigation ───
     const tabs = [
