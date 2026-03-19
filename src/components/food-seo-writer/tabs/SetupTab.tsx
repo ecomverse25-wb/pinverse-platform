@@ -6,7 +6,7 @@ import { parseKeywordCSV, getKeywordIntelligence, formatSearchVolume } from "../
 import type {
     FoodSeoSettings, WritingProvider, ImageProvider, ImageStyle, ImageDimensions,
     ParsedKeyword, FeaturedImageSettings, ContentStrategy, FoodTone, FoodH2Count,
-    TitleFormula, SchemaType, AuthoritySource, FaqCount,
+    TitleFormula, SchemaType, AuthoritySource, FaqCount, KeywordAnalysis,
 } from "../types";
 import {
     WRITING_MODELS_BY_PROVIDER, IMAGE_MODELS_BY_PROVIDER,
@@ -16,7 +16,7 @@ import {
 import {
     CONTENT_STRATEGY_OPTIONS, FOOD_TONE_OPTIONS, FOOD_H2_OPTIONS,
     TITLE_FORMULA_OPTIONS, SCHEMA_TYPE_OPTIONS, AUTHORITY_SOURCE_OPTIONS,
-    FAQ_COUNT_OPTIONS, STRATEGY_DEFAULTS,
+    FAQ_COUNT_OPTIONS, STRATEGY_DEFAULTS, INTENT_LABELS,
 } from "../constants";
 
 // ─── Provider Labels ───
@@ -64,6 +64,9 @@ interface SetupTabProps {
     generating: boolean;
     imageSettingsOpen: boolean; setImageSettingsOpen: (v: boolean) => void;
     testImageResult: { status: 'idle' | 'testing' | 'success' | 'error'; url?: string; error?: string };
+    keywordAnalysis: KeywordAnalysis | null;
+    analysisLoading: boolean;
+    onAnalyzeKeyword: (keyword: string) => void;
     onSaveApiKey: (type: "gemini" | "replicate" | "imgbb" | "anthropic" | "openai", value: string) => void;
     onSaveWpCreds: () => void;
     onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -90,6 +93,7 @@ export default function SetupTab(props: SetupTabProps) {
         affiliatesText, setAffiliatesText,
         titleGenerating, generating, imageSettingsOpen, setImageSettingsOpen,
         testImageResult,
+        keywordAnalysis, analysisLoading, onAnalyzeKeyword,
         onSaveApiKey, onSaveWpCreds, onFileUpload,
         onGenerateTitles, onRegenerateTitle, onRemoveKeyword, onToggleAll,
         onTestImageApi, onGenerate, saveLS,
@@ -124,6 +128,7 @@ export default function SetupTab(props: SetupTabProps) {
     const [csvData, setCsvData] = useState<KeywordData[]>([]);
     const [intelligence, setIntelligence] = useState<KeywordIntelligence | null>(null);
     const [intelExpanded, setIntelExpanded] = useState(true);
+    const [advancedOpen, setAdvancedOpen] = useState(false);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // ─── Debounced intelligence lookup on keyword change ───
@@ -370,65 +375,6 @@ export default function SetupTab(props: SetupTabProps) {
                             placeholder="e.g. healthy recipes, Italian food, vegan cooking" style={inputStyle} />
                     </div>
 
-                    {/* Tone */}
-                    <div>
-                        <label style={labelStyle}>Article Tone</label>
-                        <select value={settings.tone} onChange={e => updateSettings({ tone: e.target.value as FoodTone })} style={selectStyle}>
-                            {FOOD_TONE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                        </select>
-                    </div>
-                </div>
-
-                {/* Content Strategy */}
-                <div style={{ marginBottom: 16 }}>
-                    <label style={labelStyle}>Content Strategy</label>
-                    <div style={{ display: "flex", gap: 0, background: "#0f1623", borderRadius: 8, overflow: "hidden", border: "1px solid #334155" }}>
-                        {CONTENT_STRATEGY_OPTIONS.map(o => (
-                            <button
-                                key={o.value}
-                                onClick={() => {
-                                    const defaults = STRATEGY_DEFAULTS[o.value];
-                                    updateSettings({
-                                        contentStrategy: o.value as ContentStrategy,
-                                        h2Count: defaults.h2Count,
-                                    });
-                                }}
-                                title={o.tooltip}
-                                style={{
-                                    flex: 1,
-                                    background: settings.contentStrategy === o.value ? "#064e3b" : "transparent",
-                                    color: settings.contentStrategy === o.value ? "#10b981" : "#94a3b8",
-                                    border: "none", padding: "10px 16px", fontWeight: 600, cursor: "pointer", fontSize: 14,
-                                }}
-                            >
-                                {o.emoji} {o.label}
-                            </button>
-                        ))}
-                    </div>
-                    <p style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
-                        {settings.contentStrategy === 'pillar'
-                            ? '🏛️ Broad keyword, 2000+ words, targets category-level traffic'
-                            : '🔗 Long-tail keyword, 1200-1500 words, targets specific searches'}
-                    </p>
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
-                    {/* H2 Sections */}
-                    <div>
-                        <label style={labelStyle}>H2 Sections</label>
-                        <select value={settings.h2Count} onChange={e => updateSettings({ h2Count: Number(e.target.value) as FoodH2Count })} style={selectStyle}>
-                            {FOOD_H2_OPTIONS.map(o => <option key={o} value={o}>{o} sections</option>)}
-                        </select>
-                    </div>
-
-                    {/* Schema Type */}
-                    <div>
-                        <label style={labelStyle}>Schema Type</label>
-                        <select value={settings.schemaType} onChange={e => updateSettings({ schemaType: e.target.value as SchemaType })} style={selectStyle}>
-                            {SCHEMA_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label} — {o.description}</option>)}
-                        </select>
-                    </div>
-
                     {/* FAQ Count */}
                     <div>
                         <label style={labelStyle}>FAQ Questions (People Also Ask)</label>
@@ -436,25 +382,177 @@ export default function SetupTab(props: SetupTabProps) {
                             {FAQ_COUNT_OPTIONS.map(o => <option key={o} value={o}>{o} questions</option>)}
                         </select>
                     </div>
-
-                    {/* Authority Source */}
-                    <div>
-                        <label style={labelStyle}>Authority Source</label>
-                        <select value={settings.authoritySource} onChange={e => updateSettings({ authoritySource: e.target.value as AuthoritySource })} style={selectStyle}>
-                            {AUTHORITY_SOURCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                        </select>
-                    </div>
                 </div>
 
-                {/* Title Formula */}
+                {/* ── AI Strategy Preview ── */}
+                {keywordAnalysis && (
+                    <div style={{
+                        marginBottom: 16, padding: 16, background: "#0f1623",
+                        border: `1px solid ${keywordAnalysis.isFallback ? '#f59e0b40' : '#10b98140'}`,
+                        borderRadius: 10,
+                    }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                            <h4 style={{ color: "#10b981", fontSize: 14, fontWeight: 700, margin: 0 }}>
+                                🤖 AI Strategy Preview
+                            </h4>
+                            {keywordAnalysis.isFallback && (
+                                <span style={{ color: "#f59e0b", fontSize: 11, background: "#f59e0b15", padding: "2px 8px", borderRadius: 6 }}>
+                                    ⚠️ Estimated — verify settings
+                                </span>
+                            )}
+                        </div>
+
+                        <p style={{ color: "#94a3b8", fontSize: 12, margin: "0 0 12px", fontStyle: "italic" }}>
+                            &ldquo;{keywordAnalysis.keyword}&rdquo;
+                        </p>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+                            <div style={{ background: "#1e2a3a", borderRadius: 8, padding: "8px 10px" }}>
+                                <span style={{ color: "#64748b", fontSize: 11, display: "block" }}>Intent</span>
+                                <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>
+                                    {INTENT_LABELS[keywordAnalysis.intent]?.emoji} {INTENT_LABELS[keywordAnalysis.intent]?.label}
+                                </span>
+                            </div>
+                            <div style={{ background: "#1e2a3a", borderRadius: 8, padding: "8px 10px" }}>
+                                <span style={{ color: "#64748b", fontSize: 11, display: "block" }}>Strategy</span>
+                                <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>
+                                    {keywordAnalysis.contentStrategy === 'pillar' ? '🏛️ Pillar' : '🔗 Cluster'}
+                                </span>
+                            </div>
+                            <div style={{ background: "#1e2a3a", borderRadius: 8, padding: "8px 10px" }}>
+                                <span style={{ color: "#64748b", fontSize: 11, display: "block" }}>Schema</span>
+                                <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>
+                                    📊 {keywordAnalysis.schemaType}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+                            <div style={{ background: "#1e2a3a", borderRadius: 8, padding: "8px 10px" }}>
+                                <span style={{ color: "#64748b", fontSize: 11, display: "block" }}>H2 Sections</span>
+                                <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>{keywordAnalysis.h2Count} sections</span>
+                            </div>
+                            <div style={{ background: "#1e2a3a", borderRadius: 8, padding: "8px 10px" }}>
+                                <span style={{ color: "#64748b", fontSize: 11, display: "block" }}>Tone</span>
+                                <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>
+                                    {FOOD_TONE_OPTIONS.find(o => o.value === keywordAnalysis.tone)?.label || keywordAnalysis.tone}
+                                </span>
+                            </div>
+                            <div style={{ background: "#1e2a3a", borderRadius: 8, padding: "8px 10px" }}>
+                                <span style={{ color: "#64748b", fontSize: 11, display: "block" }}>Authority</span>
+                                <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>
+                                    {AUTHORITY_SOURCE_OPTIONS.find(o => o.value === keywordAnalysis.authoritySource)?.label?.split(' (')[0] || keywordAnalysis.authoritySource}
+                                </span>
+                            </div>
+                        </div>
+
+                        {keywordAnalysis.suggestedTitle && keywordAnalysis.suggestedTitle !== keywordAnalysis.keyword && (
+                            <div style={{ background: "#064e3b30", border: "1px solid #10b98130", borderRadius: 8, padding: "8px 12px", marginBottom: 8 }}>
+                                <span style={{ color: "#64748b", fontSize: 11, display: "block", marginBottom: 2 }}>Suggested Title</span>
+                                <span style={{ color: "#10b981", fontSize: 13, fontWeight: 600 }}>&ldquo;{keywordAnalysis.suggestedTitle}&rdquo;</span>
+                            </div>
+                        )}
+
+                        <div style={{ display: "flex", gap: 16, fontSize: 12, color: "#64748b" }}>
+                            <span>📝 ~{keywordAnalysis.estimatedWordCount.toLocaleString()} words</span>
+                            {keywordAnalysis.pinterestBoardSuggestion && (
+                                <span>📌 Board: {keywordAnalysis.pinterestBoardSuggestion}</span>
+                            )}
+                        </div>
+
+                        {keywordAnalysis.searchIntentReason && (
+                            <p style={{ color: "#64748b", fontSize: 11, marginTop: 8, marginBottom: 0, fontStyle: "italic" }}>
+                                💡 {keywordAnalysis.searchIntentReason}
+                            </p>
+                        )}
+                    </div>
+                )}
+
+                {analysisLoading && (
+                    <div style={{ marginBottom: 16, padding: 12, background: "#0f1623", border: "1px solid #334155", borderRadius: 10, textAlign: "center" }}>
+                        <span style={{ color: "#10b981", fontSize: 13 }}>🤖 Analyzing keyword strategy...</span>
+                    </div>
+                )}
+
+                {/* ── Advanced Override (Collapsible) ── */}
                 <div style={{ marginBottom: 16 }}>
-                    <label style={labelStyle}>SEO Title Formula</label>
-                    <select value={settings.titleFormula} onChange={e => updateSettings({ titleFormula: e.target.value as TitleFormula })} style={selectStyle}>
-                        {TITLE_FORMULA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                    <p style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
-                        Example: &ldquo;{TITLE_FORMULA_OPTIONS.find(o => o.value === settings.titleFormula)?.example}&rdquo;
-                    </p>
+                    <button
+                        onClick={() => setAdvancedOpen(prev => !prev)}
+                        style={{
+                            background: "transparent", border: "1px solid #334155", borderRadius: 8,
+                            color: "#64748b", fontSize: 12, padding: "6px 12px", cursor: "pointer",
+                            display: "flex", alignItems: "center", gap: 6, width: "100%", justifyContent: "center",
+                        }}
+                    >
+                        {advancedOpen ? '▼' : '▶'} ✏️ Override Settings (advanced){!advancedOpen && ' — AI settings are already optimized'}
+                    </button>
+
+                    {advancedOpen && (
+                        <div style={{ marginTop: 12, padding: 12, background: "#0f162320", border: "1px dashed #33415580", borderRadius: 8 }}>
+                            <p style={{ color: "#f59e0b", fontSize: 11, margin: "0 0 12px", textAlign: "center" }}>
+                                ⚠️ These overrides replace AI-detected settings for all keywords
+                            </p>
+
+                            {/* Tone */}
+                            <div style={{ marginBottom: 12 }}>
+                                <label style={labelStyle}>Article Tone</label>
+                                <select value={settings.tone} onChange={e => updateSettings({ tone: e.target.value as FoodTone })} style={selectStyle}>
+                                    {FOOD_TONE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                </select>
+                            </div>
+
+                            {/* Content Strategy */}
+                            <div style={{ marginBottom: 12 }}>
+                                <label style={labelStyle}>Content Strategy</label>
+                                <div style={{ display: "flex", gap: 0, background: "#0f1623", borderRadius: 8, overflow: "hidden", border: "1px solid #334155" }}>
+                                    {CONTENT_STRATEGY_OPTIONS.map(o => (
+                                        <button
+                                            key={o.value}
+                                            onClick={() => {
+                                                const defaults = STRATEGY_DEFAULTS[o.value];
+                                                updateSettings({ contentStrategy: o.value as ContentStrategy, h2Count: defaults.h2Count });
+                                            }}
+                                            title={o.tooltip}
+                                            style={{
+                                                flex: 1, background: settings.contentStrategy === o.value ? "#064e3b" : "transparent",
+                                                color: settings.contentStrategy === o.value ? "#10b981" : "#94a3b8",
+                                                border: "none", padding: "8px 12px", fontWeight: 600, cursor: "pointer", fontSize: 13,
+                                            }}
+                                        >
+                                            {o.emoji} {o.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
+                                <div>
+                                    <label style={labelStyle}>H2 Sections</label>
+                                    <select value={settings.h2Count} onChange={e => updateSettings({ h2Count: Number(e.target.value) as FoodH2Count })} style={selectStyle}>
+                                        {FOOD_H2_OPTIONS.map(o => <option key={o} value={o}>{o} sections</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style={labelStyle}>Schema Type</label>
+                                    <select value={settings.schemaType} onChange={e => updateSettings({ schemaType: e.target.value as SchemaType })} style={selectStyle}>
+                                        {SCHEMA_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style={labelStyle}>Title Formula</label>
+                                    <select value={settings.titleFormula} onChange={e => updateSettings({ titleFormula: e.target.value as TitleFormula })} style={selectStyle}>
+                                        {TITLE_FORMULA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style={labelStyle}>Authority Source</label>
+                                    <select value={settings.authoritySource} onChange={e => updateSettings({ authoritySource: e.target.value as AuthoritySource })} style={selectStyle}>
+                                        {AUTHORITY_SOURCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Internal Link Topics */}

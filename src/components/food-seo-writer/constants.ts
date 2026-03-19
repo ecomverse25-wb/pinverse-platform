@@ -3,7 +3,7 @@
 import type {
     ContentStrategy, FoodTone, FoodH2Count,
     TitleFormula, SchemaType, AuthoritySource, FaqCount,
-    FoodSeoSettings,
+    FoodSeoSettings, SearchIntent,
 } from "./types";
 import { DEFAULT_IMAGE_PROMPT_TEMPLATE } from "./types";
 
@@ -32,7 +32,7 @@ export const FOOD_TONE_OPTIONS: { value: FoodTone; label: string }[] = [
 ];
 
 // ─── H2 Count Options ───
-export const FOOD_H2_OPTIONS: FoodH2Count[] = [8, 10, 12, 15];
+export const FOOD_H2_OPTIONS: FoodH2Count[] = [6, 8, 10, 12, 15];
 
 // ─── Title Formula Options ───
 export const TITLE_FORMULA_OPTIONS: { value: TitleFormula; label: string; example: string }[] = [
@@ -143,3 +143,49 @@ export const RANK_MATH_WEIGHTS: Record<string, number> = {
     'Concluding paragraph present': 5,
 };
 export const RANK_MATH_MAX = 89;
+
+// ─── AI Keyword Analysis Fallbacks ───
+
+export const INTENT_SIGNALS: Record<string, string[]> = {
+    listicle: [
+        'recipes', 'ideas', 'meals', 'dinners', 'breakfasts', 'lunches',
+        'snacks', 'ways', 'tips', 'foods', 'dishes', 'options',
+    ],
+    howto: [
+        'how to', 'how do', 'guide to', 'tutorial', 'step by step',
+        'learn to', 'make', 'cook', 'prepare', 'bake',
+    ],
+    recipe: ['recipe', 'recipe for', 'homemade', 'from scratch'],
+    informational: [
+        'what is', 'what are', 'benefits of', 'best time to',
+        'why', 'difference between',
+    ],
+    comparison: ['vs', 'versus', 'compared to', 'better than'],
+    roundup: ['best', 'top', 'favorite', 'must try'],
+};
+
+export const AUTHORITY_KEYWORD_MAP: Record<string, AuthoritySource> = {
+    'weight loss': 'harvard',
+    'losing weight': 'harvard',
+    'low calorie': 'harvard',
+    'diet': 'harvard',
+    'heart healthy': 'aha',
+    'cholesterol': 'aha',
+    'cardiac': 'aha',
+    'diabetic': 'mayo-clinic',
+    'diabetes': 'mayo-clinic',
+    'blood sugar': 'mayo-clinic',
+    'high protein': 'nih',
+    'nutrition': 'usda',
+    'healthy eating': 'usda',
+    'balanced diet': 'usda',
+};
+
+export const INTENT_LABELS: Record<SearchIntent, { emoji: string; label: string }> = {
+    listicle: { emoji: '📋', label: 'Listicle' },
+    howto: { emoji: '🔧', label: 'How-To' },
+    recipe: { emoji: '🍳', label: 'Recipe' },
+    informational: { emoji: '📖', label: 'Informational' },
+    roundup: { emoji: '🏆', label: 'Roundup' },
+    comparison: { emoji: '⚖️', label: 'Comparison' },
+};

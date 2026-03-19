@@ -101,7 +101,8 @@ export function useArticleGeneration({
                     settings.titleFormula, settings.schemaType,
                     settings.authoritySource, settings.faqCount,
                     settings.internalLinkTopics, affiliateLinksText,
-                    writingModel, writingProvider
+                    writingModel, writingProvider,
+                    geminiKey, anthropicKey, openaiKey, replicateKey
                 );
 
                 if (!artResult.success || !artResult.content) {

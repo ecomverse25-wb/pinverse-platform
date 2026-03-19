@@ -20,12 +20,164 @@ export async function checkRateLimit() {
 import type { WritingProvider } from "@/components/blog-monetizer/BlogMonetizer.types";
 import type {
     FoodTone, FoodH2Count, TitleFormula, SchemaType, AuthoritySource, FaqCount,
+    KeywordAnalysis, SearchIntent,
 } from "@/components/food-seo-writer/types";
 import { generateWithClaude } from "@/app/actions/blog-monetizer/generate-claude";
 import { generateWithOpenAI } from "@/app/actions/blog-monetizer/generate-openai";
-import { TITLE_FORMULA_DESCRIPTIONS, AUTHORITY_SOURCE_URLS, STRATEGY_DEFAULTS } from "@/components/food-seo-writer/constants";
+import {
+    TITLE_FORMULA_DESCRIPTIONS, AUTHORITY_SOURCE_URLS, STRATEGY_DEFAULTS,
+    INTENT_SIGNALS, AUTHORITY_KEYWORD_MAP,
+} from "@/components/food-seo-writer/constants";
 
 // (Re-exports removed: Turbopack blocks re-exporting non-async items from a 'use server' file)
+
+// ─── Fallback Keyword Analysis (runs if AI call fails) ───
+
+function fallbackAnalyzeKeyword(keyword: string): KeywordAnalysis {
+    const kw = keyword.toLowerCase();
+    const wordCount = kw.split(/\s+/).length;
+
+    // Detect intent from keyword signals
+    let intent: SearchIntent = 'listicle'; // default
+    for (const [intentKey, signals] of Object.entries(INTENT_SIGNALS)) {
+        if (signals.some(s => kw.includes(s))) {
+            intent = intentKey as SearchIntent;
+            break;
+        }
+    }
+
+    // Detect authority source from topic
+    let authoritySource: AuthoritySource = 'usda';
+    let authorityUrl = AUTHORITY_SOURCE_URLS['usda'];
+    for (const [signal, source] of Object.entries(AUTHORITY_KEYWORD_MAP)) {
+        if (kw.includes(signal)) {
+            authoritySource = source;
+            authorityUrl = AUTHORITY_SOURCE_URLS[source];
+            break;
+        }
+    }
+
+    // Determine strategy
+    const contentStrategy = wordCount < 3 ? 'pillar' as const : 'cluster' as const;
+
+    // Map intent to settings
+    const intentMappings: Record<SearchIntent, {
+        schemaType: SchemaType; titleFormula: TitleFormula; tone: FoodTone;
+        h2Count: FoodH2Count; wordTarget: number;
+    }> = {
+        listicle: { schemaType: 'ItemList', titleFormula: 'number-adjective-keyword-benefit', tone: 'listicle', h2Count: 10, wordTarget: 1500 },
+        howto: { schemaType: 'HowTo', titleFormula: 'how-to-keyword-outcome', tone: 'how-to', h2Count: 8, wordTarget: 1500 },
+        recipe: { schemaType: 'Recipe', titleFormula: 'best-number-keyword-audience', tone: 'how-to', h2Count: 6, wordTarget: 1200 },
+        informational: { schemaType: 'Article', titleFormula: 'ultimate-guide-keyword', tone: 'personal-story', h2Count: 10, wordTarget: 1500 },
+        roundup: { schemaType: 'ItemList', titleFormula: 'number-adjective-keyword-benefit', tone: 'listicle', h2Count: 10, wordTarget: 1500 },
+        comparison: { schemaType: 'Article', titleFormula: 'best-number-keyword-audience', tone: 'listicle', h2Count: 8, wordTarget: 1500 },
+    };
+
+    const mapping = intentMappings[intent];
+    const h2Count = contentStrategy === 'pillar' ? 15 : mapping.h2Count;
+    const wordTarget = contentStrategy === 'pillar' ? 2000 : mapping.wordTarget;
+
+    return {
+        keyword,
+        intent,
+        searchIntentReason: `Fallback detection: keyword contains signals for ${intent} intent`,
+        schemaType: mapping.schemaType,
+        contentStrategy,
+        titleFormula: mapping.titleFormula,
+        tone: mapping.tone,
+        h2Count: h2Count as FoodH2Count,
+        authoritySource,
+        authorityUrl,
+        suggestedTitle: keyword,
+        estimatedWordCount: wordTarget,
+        pinterestBoardSuggestion: keyword.split(' ').slice(0, 3).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+        isFallback: true,
+    };
+}
+
+// ─── AI Keyword Analysis (Stage 1) ───
+
+export async function analyzeKeywordAction(
+    keyword: string,
+    geminiKey?: string,
+    writingProvider: WritingProvider = 'google',
+    writingModel: string = 'gemini-2.5-flash',
+    anthropicKey?: string,
+    openaiKey?: string,
+    replicateKey?: string
+): Promise<KeywordAnalysis> {
+    const trimmedKeyword = keyword.substring(0, 200).trim();
+    if (!trimmedKeyword) return fallbackAnalyzeKeyword(keyword);
+
+    const analysisPrompt = `Analyze this food blog keyword and return a JSON object. Return ONLY valid JSON, nothing else.
+
+Keyword: "${trimmedKeyword}"
+
+Return this exact JSON structure:
+{
+  "intent": "listicle" | "howto" | "recipe" | "informational" | "roundup" | "comparison",
+  "searchIntentReason": "one sentence explanation of why this intent was chosen",
+  "schemaType": "ItemList" | "HowTo" | "Recipe" | "Article",
+  "contentStrategy": "pillar" | "cluster",
+  "titleFormula": "number-adjective-keyword-benefit" | "how-to-keyword-outcome" | "best-number-keyword-audience" | "ultimate-guide-keyword",
+  "tone": "how-to" | "listicle" | "comparison" | "personal-story",
+  "h2Count": 6 | 8 | 10 | 12 | 15,
+  "authoritySource": "usda" | "harvard" | "mayo-clinic" | "cdc" | "nih" | "aha",
+  "authorityUrl": "https://...",
+  "suggestedTitle": "AI-generated SEO title for this keyword, max 60 chars",
+  "estimatedWordCount": 1200 | 1500 | 2000 | 2500,
+  "pinterestBoardSuggestion": "suggested Pinterest board name"
+}
+
+Rules for analysis:
+- Listicle: plural keywords like "recipes", "ideas", "meals", "tips"
+- HowTo: keywords starting with "how to", "make", "cook", "prepare"
+- Recipe: singular recipe keywords like "lemon chicken recipe"
+- Informational: "what is", "benefits of", "why"
+- Roundup: "best", "top", "favorite"
+- Comparison: "vs", "versus", "compared"
+- Use "pillar" for broad 1-2 word keywords, "cluster" for 3+ word long-tail
+- Pick authority source based on health topic relevance
+- Title must include the focus keyword in first 60 chars`;
+
+    try {
+        const config: ProviderConfig = {
+            writingProvider, writingModel,
+            geminiKey, anthropicKey, openaiKey, replicateKey,
+        };
+        const text = await generateTextWithProvider(analysisPrompt, config);
+        const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+
+        // Validate and coerce fields
+        const validIntents: SearchIntent[] = ['listicle', 'howto', 'recipe', 'informational', 'roundup', 'comparison'];
+        const validSchemas: SchemaType[] = ['ItemList', 'HowTo', 'Recipe', 'Article'];
+        const validStrategies = ['pillar', 'cluster'] as const;
+        const validTones: FoodTone[] = ['how-to', 'listicle', 'comparison', 'personal-story'];
+        const validH2Counts: FoodH2Count[] = [6, 8, 10, 12, 15];
+        const validAuthorities: AuthoritySource[] = ['usda', 'harvard', 'mayo-clinic', 'cdc', 'nih', 'aha'];
+
+        return {
+            keyword: trimmedKeyword,
+            intent: validIntents.includes(parsed.intent) ? parsed.intent : 'listicle',
+            searchIntentReason: String(parsed.searchIntentReason || '').substring(0, 200),
+            schemaType: validSchemas.includes(parsed.schemaType) ? parsed.schemaType : 'auto-detect',
+            contentStrategy: validStrategies.includes(parsed.contentStrategy) ? parsed.contentStrategy : 'cluster',
+            titleFormula: parsed.titleFormula || 'number-adjective-keyword-benefit',
+            tone: validTones.includes(parsed.tone) ? parsed.tone : 'listicle',
+            h2Count: validH2Counts.includes(parsed.h2Count) ? parsed.h2Count : 10,
+            authoritySource: validAuthorities.includes(parsed.authoritySource) ? parsed.authoritySource : 'usda',
+            authorityUrl: String(parsed.authorityUrl || AUTHORITY_SOURCE_URLS['usda']),
+            suggestedTitle: String(parsed.suggestedTitle || trimmedKeyword).substring(0, 100),
+            estimatedWordCount: [1200, 1500, 2000, 2500].includes(parsed.estimatedWordCount) ? parsed.estimatedWordCount : 1500,
+            pinterestBoardSuggestion: String(parsed.pinterestBoardSuggestion || '').substring(0, 100),
+            isFallback: false,
+        };
+    } catch {
+        // AI analysis failed — use fallback rules
+        return fallbackAnalyzeKeyword(trimmedKeyword);
+    }
+}
 
 // ─── Replicate Text Generation ───
 
@@ -78,13 +230,17 @@ async function generateWithReplicate(prompt: string, replicateApiKey: string, mo
 interface ProviderConfig {
     writingProvider: WritingProvider;
     writingModel: string;
+    geminiKey?: string;
+    anthropicKey?: string;
+    openaiKey?: string;
+    replicateKey?: string;
 }
 
 async function generateTextWithProvider(prompt: string, config: ProviderConfig): Promise<string> {
     switch (config.writingProvider) {
         case "google": {
-            const apiKey = process.env.GEMINI_API_KEY;
-            if (!apiKey) throw new Error("Gemini configuration error.");
+            const apiKey = config.geminiKey || process.env.GEMINI_API_KEY;
+            if (!apiKey) throw new Error("Gemini API key is missing. Please enter your key in the Setup tab.");
             const ai = new GoogleGenAI({ apiKey });
             const response = await ai.models.generateContent({
                 model: config.writingModel,
@@ -95,18 +251,18 @@ async function generateTextWithProvider(prompt: string, config: ProviderConfig):
             return text;
         }
         case "claude": {
-            const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
-            if (!anthropicApiKey) throw new Error("Anthropic configuration error.");
+            const anthropicApiKey = config.anthropicKey || process.env.ANTHROPIC_API_KEY;
+            if (!anthropicApiKey) throw new Error("Anthropic API key is missing. Please enter your key in the Setup tab.");
             return generateWithClaude({ prompt, anthropicApiKey, model: config.writingModel });
         }
         case "openai": {
-            const openaiApiKey = process.env.OPENAI_API_KEY;
-            if (!openaiApiKey) throw new Error("OpenAI configuration error.");
+            const openaiApiKey = config.openaiKey || process.env.OPENAI_API_KEY;
+            if (!openaiApiKey) throw new Error("OpenAI API key is missing. Please enter your key in the Setup tab.");
             return generateWithOpenAI({ prompt, openaiApiKey, model: config.writingModel });
         }
         case "replicate": {
-            const replicateApiKey = process.env.REPLICATE_API_KEY;
-            if (!replicateApiKey) throw new Error("Replicate configuration error.");
+            const replicateApiKey = config.replicateKey || process.env.REPLICATE_API_KEY;
+            if (!replicateApiKey) throw new Error("Replicate API key is missing. Please enter your key in the Setup tab.");
             return generateWithReplicate(prompt, replicateApiKey, config.writingModel);
         }
         default:
@@ -130,7 +286,11 @@ export async function generateFoodBulkTitlesAction(
     titleFormula: TitleFormula,
     h2Count: FoodH2Count,
     model: string = "gemini-2.5-flash",
-    writingProvider: WritingProvider = "google"
+    writingProvider: WritingProvider = "google",
+    geminiKey?: string,
+    anthropicKey?: string,
+    openaiKey?: string,
+    replicateKey?: string
 ): Promise<{ success?: boolean; titles?: { keyword: string; title: string }[]; error?: string }> {
     if (!(await checkRateLimit())) return { error: "Rate limit exceeded. Please try again later." };
     if (keywords.length === 0) return { error: "No keywords provided." };
@@ -174,6 +334,7 @@ Return JSON array only, no markdown, no code fences:
     try {
         const config: ProviderConfig = {
             writingProvider, writingModel: model,
+            geminiKey, anthropicKey, openaiKey, replicateKey,
         };
         const text = await generateTextWithProvider(prompt, config);
         const cleaned = text.replace(/```json\s*/gi, "").replace(/```/g, "").trim();
@@ -198,11 +359,16 @@ export async function generateFoodSingleTitleAction(
     titleFormula: TitleFormula,
     h2Count: FoodH2Count,
     model?: string,
-    writingProvider?: WritingProvider
+    writingProvider?: WritingProvider,
+    geminiKey?: string,
+    anthropicKey?: string,
+    openaiKey?: string,
+    replicateKey?: string
 ): Promise<{ success?: boolean; title?: string; error?: string }> {
     const result = await generateFoodBulkTitlesAction(
         [keyword], tone, niche, titleFormula, h2Count,
-        model, writingProvider
+        model, writingProvider,
+        geminiKey, anthropicKey, openaiKey, replicateKey
     );
     if (result.success && result.titles && result.titles.length > 0) {
         return { success: true, title: result.titles[0].title };
@@ -226,7 +392,11 @@ export async function generateFoodArticleAction(
     internalLinkTopics: string,
     affiliateLinksText: string,
     model: string = "gemini-2.5-flash",
-    writingProvider: WritingProvider = "google"
+    writingProvider: WritingProvider = "google",
+    geminiKey?: string,
+    anthropicKey?: string,
+    openaiKey?: string,
+    replicateKey?: string
 ): Promise<{
 
     success?: boolean;
@@ -414,6 +584,7 @@ Do NOT wrap in code fences. Do NOT include <html>, <head>, or <body> tags.`;
     try {
         const config: ProviderConfig = {
             writingProvider, writingModel: model,
+            geminiKey, anthropicKey, openaiKey, replicateKey,
         };
         let text = await generateTextWithProvider(prompt, config);
 
@@ -518,3 +689,14 @@ Do NOT wrap in code fences. Do NOT include <html>, <head>, or <body> tags.`;
         return { error: "Failed to generate article. Please try again or check AI provider availability." };
     }
 }
+
+// TEST: uncomment to verify API connection
+// const testResult = await generateFoodArticleAction(
+//   'Test Title', 'healthy chicken dinner recipes', 'recipes',
+//   'listicle', 'cluster', 8,
+//   'number-adjective-keyword-benefit', 'auto-detect',
+//   'auto-select', 5, '', '',
+//   'gemini-2.5-flash', 'google',
+//   'YOUR_KEY_HERE'
+// );
+// console.log('TEST RESULT:', testResult?.title, 'ERROR:', testResult?.error);

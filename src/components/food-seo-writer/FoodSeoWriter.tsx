@@ -5,13 +5,14 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type {
     FoodSeoSettings, ParsedKeyword, FeaturedImageSettings,
     AffiliateLink, WritingProvider, ImageProvider, ImageStyle, ImageDimensions,
-    FoodTone, FoodH2Count, TitleFormula, BatchQueueItem,
+    FoodTone, FoodH2Count, TitleFormula, BatchQueueItem, KeywordAnalysis,
 } from "./types";
 import { RANK_MATH_WEIGHTS } from "./constants";
 import { DEFAULT_WRITING_MODELS, DEFAULT_IMAGE_MODELS } from "./types";
 import { DEFAULT_FOOD_SEO_SETTINGS } from "./constants";
 import {
     generateFoodBulkTitlesAction, generateFoodSingleTitleAction,
+    analyzeKeywordAction,
 } from "@/app/actions/food-seo-writer/generate";
 import { testImageProviderAction } from "@/app/actions/blog-monetizer/generate-image";
 import { getUserSettingsAction, updateUserSettingsAction } from "@/app/actions/user-settings-actions";
@@ -74,6 +75,11 @@ export default function FoodSeoWriter() {
     const [anthropicKey, setAnthropicKey] = useState("");
     const [openaiKey, setOpenaiKey] = useState("");
     const [imgbbKey, setImgbbKey] = useState("");
+
+    // Keyword Analysis (AI Strategy)
+    const [keywordAnalysis, setKeywordAnalysis] = useState<KeywordAnalysis | null>(null);
+    const [analysisLoading, setAnalysisLoading] = useState(false);
+    const analysisDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Provider & Model
     const [writingProvider, setWritingProvider] = useState<WritingProvider>("google");
@@ -292,6 +298,38 @@ export default function FoodSeoWriter() {
     const removeKeyword = (idx: number) => setParsedKeywords(prev => prev.filter((_, i) => i !== idx));
 
 
+    // ─── Keyword AI Analysis ───
+    const handleAnalyzeKeyword = useCallback((keyword: string) => {
+        if (analysisDebounceRef.current) clearTimeout(analysisDebounceRef.current);
+        if (!keyword.trim() || keyword.trim().length < 3) {
+            setKeywordAnalysis(null);
+            return;
+        }
+        setAnalysisLoading(true);
+        analysisDebounceRef.current = setTimeout(async () => {
+            try {
+                const result = await analyzeKeywordAction(
+                    keyword, geminiKey, writingProvider, writingModel,
+                    anthropicKey, openaiKey, replicateKey
+                );
+                setKeywordAnalysis(result);
+                // Auto-apply AI-detected settings (unless user has manually overridden)
+                updateSettings({
+                    tone: result.tone,
+                    h2Count: result.h2Count,
+                    schemaType: result.schemaType,
+                    authoritySource: result.authoritySource,
+                    contentStrategy: result.contentStrategy,
+                    titleFormula: result.titleFormula,
+                });
+            } catch {
+                // Silently fail — keep previous analysis or null
+            } finally {
+                setAnalysisLoading(false);
+            }
+        }, 600);
+    }, [geminiKey, writingProvider, writingModel, anthropicKey, openaiKey, replicateKey, updateSettings]);
+
     // ─── Generate Titles ───
     const handleGenerateTitles = useCallback(async () => {
         const checked = parsedKeywords.filter(k => k.checked).map(k => k.text);
@@ -302,7 +340,8 @@ export default function FoodSeoWriter() {
 
         const result = await generateFoodBulkTitlesAction(
             checked, settings.tone, settings.niche, settings.titleFormula, settings.h2Count,
-            writingModel, writingProvider
+            writingModel, writingProvider,
+            geminiKey, anthropicKey, openaiKey, replicateKey
         );
 
         if (result.success && result.titles) {
@@ -316,14 +355,15 @@ export default function FoodSeoWriter() {
             setStatusMessage(`❌ ${result.error}`);
         }
         setTitleGenerating(false);
-    }, [parsedKeywords, settings.tone, settings.niche, settings.titleFormula, settings.h2Count, writingModel, writingProvider]);
+    }, [parsedKeywords, settings.tone, settings.niche, settings.titleFormula, settings.h2Count, writingModel, writingProvider, geminiKey, anthropicKey, openaiKey, replicateKey]);
 
     const regenerateTitle = useCallback(async (idx: number) => {
         const kw = parsedKeywords[idx];
         if (!kw) return;
         const result = await generateFoodSingleTitleAction(
             kw.text, settings.tone, settings.niche, settings.titleFormula, settings.h2Count,
-            writingModel, writingProvider
+            writingModel, writingProvider,
+            geminiKey, anthropicKey, openaiKey, replicateKey
         );
         if (result.success && result.title) {
             setParsedKeywords(prev => {
@@ -332,7 +372,7 @@ export default function FoodSeoWriter() {
                 return copy;
             });
         }
-    }, [parsedKeywords, settings.tone, settings.niche, settings.titleFormula, settings.h2Count, writingModel, writingProvider]);
+    }, [parsedKeywords, settings.tone, settings.niche, settings.titleFormula, settings.h2Count, writingModel, writingProvider, geminiKey, anthropicKey, openaiKey, replicateKey]);
 
     // ─── Get Keywords + Titles ───
     const getKeywordsAndTitles = useCallback((): { keyword: string; title: string }[] => {
@@ -438,6 +478,9 @@ export default function FoodSeoWriter() {
                     generating={articleGen.generating}
                     imageSettingsOpen={imageSettingsOpen} setImageSettingsOpen={setImageSettingsOpen}
                     testImageResult={testImageResult}
+                    keywordAnalysis={keywordAnalysis}
+                    analysisLoading={analysisLoading}
+                    onAnalyzeKeyword={handleAnalyzeKeyword}
                     onSaveApiKey={saveApiKey}
                     onSaveWpCreds={saveWpCreds}
                     onFileUpload={handleFileUpload}

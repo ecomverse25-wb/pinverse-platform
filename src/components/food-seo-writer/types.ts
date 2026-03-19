@@ -23,7 +23,7 @@ export type ContentStrategy = 'pillar' | 'cluster';
 
 export type FoodTone = 'how-to' | 'listicle' | 'comparison' | 'personal-story';
 
-export type FoodH2Count = 8 | 10 | 12 | 15;
+export type FoodH2Count = 6 | 8 | 10 | 12 | 15;
 
 export type TitleFormula =
     | 'number-adjective-keyword-benefit'
@@ -43,6 +43,33 @@ export type AuthoritySource =
     | 'aha';
 
 export type FaqCount = 4 | 5 | 6;
+
+// ─── AI Keyword Analysis Types ───
+
+export type SearchIntent =
+    | 'listicle'
+    | 'howto'
+    | 'recipe'
+    | 'informational'
+    | 'roundup'
+    | 'comparison';
+
+export interface KeywordAnalysis {
+    keyword: string;
+    intent: SearchIntent;
+    searchIntentReason: string;
+    schemaType: SchemaType;
+    contentStrategy: ContentStrategy;
+    titleFormula: TitleFormula;
+    tone: FoodTone;
+    h2Count: FoodH2Count;
+    authoritySource: AuthoritySource;
+    authorityUrl: string;
+    suggestedTitle: string;
+    estimatedWordCount: number;
+    pinterestBoardSuggestion: string;
+    isFallback?: boolean;
+}
 
 // ─── Settings Interface ───
 
