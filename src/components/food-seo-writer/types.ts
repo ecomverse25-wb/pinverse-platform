@@ -91,6 +91,8 @@ export interface FoodSeoSettings {
         colorMood: string;
         dimensions: import("@/components/blog-monetizer/BlogMonetizer.types").ImageDimensions;
     };
+    amazonAffiliateTag?: string;
+    publishMode: 'draft' | 'publish';
 }
 
 // ─── Article Interface ───
@@ -113,6 +115,7 @@ export interface FoodArticle {
     pinTitle?: string;
     pinDescription?: string;
     schemaMarkup?: string;
+    tags?: string[];
 }
 
 // ─── Batch Queue Types ───

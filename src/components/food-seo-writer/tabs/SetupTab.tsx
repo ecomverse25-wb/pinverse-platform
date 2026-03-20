@@ -382,6 +382,15 @@ export default function SetupTab(props: SetupTabProps) {
                             {FAQ_COUNT_OPTIONS.map(o => <option key={o} value={o}>{o} questions</option>)}
                         </select>
                     </div>
+
+                    {/* Publish Mode */}
+                    <div>
+                        <label style={labelStyle}>Publishing Mode</label>
+                        <select value={settings.publishMode} onChange={e => updateSettings({ publishMode: e.target.value as 'draft' | 'publish' })} style={selectStyle}>
+                            <option value="publish">Publish Immediately</option>
+                            <option value="draft">Save as Draft</option>
+                        </select>
+                    </div>
                 </div>
 
                 {/* ── AI Strategy Preview ── */}
@@ -576,6 +585,18 @@ export default function SetupTab(props: SetupTabProps) {
                         <span style={{ color: "#e2e8f0", fontSize: 14 }}>📌 Generate Pinterest Assets</span>
                     </label>
                     <span style={{ color: "#64748b", fontSize: 12 }}>Pin titles, descriptions & 3 pin variations per article</span>
+                </div>
+
+                {/* Amazon Affiliate Tag */}
+                <div style={{ marginBottom: 16 }}>
+                    <label style={labelStyle}>Amazon Affiliate Tag (optional)</label>
+                    <input type="text" value={settings.amazonAffiliateTag || ''}
+                        onChange={e => updateSettings({ amazonAffiliateTag: e.target.value })}
+                        placeholder="e.g. myfoodblog-20"
+                        style={inputStyle} />
+                    <p style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
+                        Appended to generated Amazon search URLs for affiliate marketing
+                    </p>
                 </div>
 
                 {/* Affiliate Links */}

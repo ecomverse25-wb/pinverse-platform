@@ -2,10 +2,10 @@ import { useState, useRef, useCallback } from "react";
 import type { FoodArticle, FoodSeoSettings, WritingProvider, ImageProvider, SectionImage } from "../types";
 import {
     generateFoodArticleAction,
+    publishFoodArticleToWPAction
 } from "@/app/actions/food-seo-writer/generate";
 import {
-    matchAffiliateLinksAction,
-    publishBlogToWPAction,
+    matchAffiliateLinksAction
 } from "@/app/actions/blog-monetizer/generate";
 import {
     generateFeaturedImageAction,
@@ -101,6 +101,7 @@ export function useArticleGeneration({
                     settings.titleFormula, settings.schemaType,
                     settings.authoritySource, settings.faqCount,
                     settings.internalLinkTopics, affiliateLinksText,
+                    settings.amazonAffiliateTag,
                     writingModel, writingProvider,
                     geminiKey, anthropicKey, openaiKey, replicateKey
                 );
@@ -257,6 +258,7 @@ export function useArticleGeneration({
                         pinTitle: artResult.pinTitle,
                         pinDescription: artResult.pinDescription,
                         schemaMarkup: artResult.schemaMarkup,
+                        tags: artResult.tags,
                         status: "ready",
                     };
                     return copy;
@@ -296,7 +298,7 @@ export function useArticleGeneration({
             setStatusMessage(`📤 Publishing... ${i + 1}/${readyArticles.length}`);
             const art = readyArticles[i];
             try {
-                const result = await publishBlogToWPAction(art.title, art.content, art.featuredImageUrl, wpUrl, wpUser, wpPassword);
+                const result = await publishFoodArticleToWPAction(art, wpUrl, wpUser, wpPassword, settings.publishMode);
                 if (result.success) {
                     const idx = articles.indexOf(art);
                     if (idx !== -1) updateArticle(idx, { ...art, status: "published", wpLink: result.link, wpPostId: result.id });
@@ -311,7 +313,7 @@ export function useArticleGeneration({
             await new Promise(r => setTimeout(r, 1000));
         }
         if (readyArticles.length > 0) setStatusMessage("✅ Publishing process finished!");
-    }, [articles, wpUrl, wpUser, wpPassword, setStatusMessage, updateArticle]);
+    }, [articles, wpUrl, wpUser, wpPassword, settings.publishMode, setStatusMessage, updateArticle]);
 
     const exportTitlesCSV = useCallback((items: { keyword: string; title: string }[]) => {
         const csv = "keyword,title\n" + items.map(r => `"${r.keyword}","${r.title}"`).join("\n");
