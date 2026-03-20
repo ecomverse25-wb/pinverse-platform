@@ -93,6 +93,7 @@ export interface FoodSeoSettings {
     };
     amazonAffiliateTag?: string;
     publishMode: 'draft' | 'publish';
+    storeProducts: Array<{ name: string; url: string; description?: string }>;
 }
 
 // ─── Article Interface ───

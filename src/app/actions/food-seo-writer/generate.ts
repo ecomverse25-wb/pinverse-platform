@@ -392,6 +392,7 @@ export async function generateFoodArticleAction(
     internalLinkTopics: string,
     affiliateLinksText: string,
     amazonAffiliateTag?: string,
+    storeProducts?: Array<{name: string, url: string, description?: string}>,
     model: string = "gemini-2.5-flash",
     writingProvider: WritingProvider = "google",
     geminiKey?: string,
@@ -498,10 +499,17 @@ AFFILIATE LINKS:
 ${(affiliateLinksText || amazonAffiliateTag) ? `- Insert after benefit statements, never before
 - Max 1 per H2 section
 - Format: <a href="https://www.amazon.com/s?k=PRODUCT_NAME_URL_ENCODED${amazonAffiliateTag ? `&tag=${amazonAffiliateTag}` : ''}">Product Name</a>
-- Replace PRODUCT_NAME_URL_ENCODED with a STRICTLY URL-encoded search term. Strip any cooking verbs or adjectives first (e.g. "heavy-duty baking pan" -> "baking+pan", "best blender for smoothies" -> "blender"). Encode spaces as '+'.` : `- Do NOT generate any affiliate links, Amazon URLs, or product links of any kind.
-- When mentioning kitchen tools or products, wrap the product name in <strong> tags ONLY.
-- Example: <strong>sheet pan</strong> — never wrap in an <a> tag.
-- No <a href="https://amazon.com/..."> or any other product URLs.`}
+- Replace PRODUCT_NAME_URL_ENCODED with a STRICTLY URL-encoded search term. Strip any cooking verbs or adjectives first (e.g. "heavy-duty baking pan" -> "baking+pan", "best blender for smoothies" -> "blender"). Encode spaces as '+'.` : `- Do NOT generate any amazon URLs.`}
+
+${(storeProducts && storeProducts.length > 0) ? `STORE PRODUCTS CATALOG:
+${storeProducts.map(p => `- Product: ${p.name} | URL: ${p.url}${p.description ? ` | Note: ${p.description}` : ''}`).join('\n')}
+
+STORE PRODUCT INSERTION RULES:
+- IMPORTANT: Review the STORE PRODUCTS CATALOG above.
+- In EACH H2 section, contextually recommend ONE relevant item from the catalog.
+- Format strictly as: <!-- STORE_LINK: {Product Name} | url: {url} --> embedded naturally in a sentence.
+- Example: "For the perfect crust, we recommend using a <!-- STORE_LINK: Cast Iron Skillet | url: https://yourstore.com/skillet --> to get that even bake."
+- Prioritize natural, helpful recommendations over sales pitches. Do NOT recommend the same product in every section.` : ''}
 
 EXTERNAL LINK (insert exactly 1):
 - Place in the final third of the article
@@ -685,8 +693,11 @@ Do NOT wrap in code fences. Do NOT include <html>, <head>, or <body> tags.`;
 
         console.log(`[FOOD-SEO] Extracted title: "${articleTitle}" for keyword: "${keyword}"`);
 
-        // Process Internal Links
+        // Process Internal Links & Store Links
         articleContent = processInternalLinks(articleContent);
+        if (storeProducts && storeProducts.length > 0) {
+            articleContent = processStoreLinks(articleContent);
+        }
 
         // Count words
         const wordCount = articleContent.replace(/<[^>]*>/g, " ").split(/\s+/).filter(Boolean).length;
@@ -712,6 +723,13 @@ Do NOT wrap in code fences. Do NOT include <html>, <head>, or <body> tags.`;
 // const testResult = await generateFoodArticleAction( ... );
 
 // ─── Post-Processing & Publishing ───
+
+function processStoreLinks(html: string): string {
+    const linkRegex = /<!--\s*STORE_LINK:\s*([^|]+)\|\s*url:\s*([^>]+)-->/gi;
+    return html.replace(linkRegex, (match, productName, url) => {
+        return `<a href="${url.trim()}" target="_blank" rel="noopener">${productName.trim()}</a>`;
+    });
+}
 
 function processInternalLinks(html: string): string {
     const paragraphs = html.split(/(<\/p>|<p[^>]*>)/i);
@@ -817,10 +835,15 @@ export async function publishFoodArticleToWPAction(
         const baseUrl = wpUrl.replace(/\/$/, "");
         const authHeader = "Basic " + Buffer.from(`${wpUser}:${wpPassword}`).toString("base64");
 
-        // FIX 6: Strip duplicate H1/H2 titles from start
-        const escapeRegex = (s: string) => s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        const titleRegex = new RegExp(`^\\s*<h[12][^>]*>${escapeRegex(article.title)}<\\/h[12]>\\s*`, 'i');
-        let finalContent = article.content.replace(titleRegex, '');
+        // FIX 6: Strip duplicate H1 and H2 titles from start
+        // Completely strip any leading <h1> or <h2> tags that match the article title or keyword
+        let finalContent = article.content.trim();
+        
+        // Remove an H1 if it's the very first thing
+        finalContent = finalContent.replace(/^<h1[^>]*>.*?<\/h1>\s*/i, '');
+        
+        // Remove an H2 if it's the very first thing (sometimes Claude puts the title in an H2)
+        finalContent = finalContent.replace(/^<h2[^>]*>.*?<\/h2>\s*/i, '');
         
         // FIX 1: Remove metadata from post body (already done by strict extraction in generate, but double check)
         finalContent = finalContent
@@ -879,87 +902,56 @@ export async function publishFoodArticleToWPAction(
             }
         }
 
-        // FIX 2: Derive category from niche (priority) or first 2 words of keyword — NEVER from title
-        let categoryIds: number[] | undefined;
+        // FIX 2: Create or retrieve Category matching the Niche
+        let categoryId: number | undefined;
         try {
-            const categoryName = (niche && niche.trim())
-                ? niche.trim()
-                : article.keyword.split(/\s+/).slice(0, 2).join(' ');
+            const categoryName = niche ? niche.trim() : "Food and Drink";
             const categorySlug = categoryName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-            
-            console.log(`[FOOD-SEO] Category lookup — name: "${categoryName}", slug: "${categorySlug}"`);
-            
-            // Step 1: Search by slug (most precise)
-            const catRes = await fetch(
-                `${baseUrl}/wp-json/wp/v2/categories?slug=${encodeURIComponent(categorySlug)}`,
-                { headers: { "Authorization": authHeader } }
-            );
+            console.log(`[FOOD-SEO] Resolving Category — name: "${categoryName}", slug: "${categorySlug}"`);
+
+            // Step 1: Check if it exists by slug
+            const catRes = await fetch(`${baseUrl}/wp-json/wp/v2/categories?slug=${categorySlug}`, {
+                headers: { "Authorization": authHeader }
+            });
             const cats = await catRes.json();
-            const validCats = Array.isArray(cats) ? cats.filter((c: { id: number; name: string }) => c.id !== 1) : [];
-
-            if (validCats.length > 0) {
-                categoryIds = [validCats[0].id];
-                console.log(`[FOOD-SEO] Found existing category by slug: id=${validCats[0].id} name="${validCats[0].name}"`);
+            
+            if (cats && cats.length > 0) {
+                categoryId = cats[0].id;
+                console.log(`[FOOD-SEO] Found existing category ID: ${categoryId}`);
             } else {
-                // Step 2: Also search by name (in case slug doesn't match)
-                const catNameRes = await fetch(
-                    `${baseUrl}/wp-json/wp/v2/categories?search=${encodeURIComponent(categoryName)}`,
-                    { headers: { "Authorization": authHeader } }
-                );
-                const catNameResults = await catNameRes.json();
-                const validNameCats = Array.isArray(catNameResults) ? catNameResults.filter((c: { id: number; name: string }) => c.id !== 1) : [];
+                // Step 2: Create new category
+                console.log(`[FOOD-SEO] Category not found. Creating new category...`);
+                const createCat = await fetch(`${baseUrl}/wp-json/wp/v2/categories`, {
+                    method: "POST",
+                    headers: { "Authorization": authHeader, "Content-Type": "application/json" },
+                    body: JSON.stringify({ name: categoryName, slug: categorySlug })
+                });
 
-                if (validNameCats.length > 0) {
-                    categoryIds = [validNameCats[0].id];
-                    console.log(`[FOOD-SEO] Found existing category by name search: id=${validNameCats[0].id} name="${validNameCats[0].name}"`);
+                if (createCat.ok) {
+                    const newCat = await createCat.json();
+                    categoryId = newCat.id;
+                    console.log(`[FOOD-SEO] Created new category ID: ${categoryId}`);
                 } else {
-                    // Step 3: Create the category
-                    const catDisplayName = categoryName.split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                    console.log(`[FOOD-SEO] Creating new category: "${catDisplayName}" with slug: "${categorySlug}"`);
-                    const createCat = await fetch(`${baseUrl}/wp-json/wp/v2/categories`, {
+                    // Step 3: Conflict fallback (probably exists as a Tag)
+                    console.warn(`[FOOD-SEO] Category creation failed (likely slug conflict with tag). Creating with -hub slug...`);
+                    const fallbackCreate = await fetch(`${baseUrl}/wp-json/wp/v2/categories`, {
                         method: "POST",
                         headers: { "Authorization": authHeader, "Content-Type": "application/json" },
-                        body: JSON.stringify({ name: catDisplayName, slug: categorySlug })
+                        body: JSON.stringify({ name: categoryName, slug: categorySlug + '-hub' })
                     });
-                    
-                    if (createCat.ok) {
-                        const newCat = await createCat.json();
-                        if (newCat.id && newCat.id !== 1) {
-                            categoryIds = [newCat.id];
-                            console.log(`[FOOD-SEO] Created category: id=${newCat.id}`);
-                        }
-                    } else {
-                        // Handle term_exists error — WP returns the existing term ID in the error body
-                        const errBody = await createCat.text().catch(() => '{}');
-                        console.error(`[FOOD-SEO] Category creation returned ${createCat.status}: ${errBody}`);
-                        try {
-                            const errJson = JSON.parse(errBody);
-                            if (errJson.code === 'term_exists' && errJson.data?.term_id) {
-                                // If the term exists but wasn't found in category search, it's likely a Tag.
-                                // Try creating the category again with a modified slug to avoid conflict.
-                                console.log(`[FOOD-SEO] Category slug conflict (likely a tag exists). Retrying with -cat slug...`);
-                                const retryCreate = await fetch(`${baseUrl}/wp-json/wp/v2/categories`, {
-                                    method: "POST",
-                                    headers: { "Authorization": authHeader, "Content-Type": "application/json" },
-                                    body: JSON.stringify({ name: catDisplayName, slug: categorySlug + '-cat' })
-                                });
-                                if (retryCreate.ok) {
-                                    const retryCat = await retryCreate.json();
-                                    categoryIds = [retryCat.id];
-                                    console.log(`[FOOD-SEO] Successfully created category with modified slug: id=${retryCat.id}`);
-                                } else {
-                                    console.log(`[FOOD-SEO] Second category creation attempt failed:`, await retryCreate.text().catch(()=>''));
-                                }
-                            }
-                        } catch { /* ignore JSON parse error */ }
+                    if (fallbackCreate.ok) {
+                        const fallbackCat = await fallbackCreate.json();
+                        categoryId = fallbackCat.id;
+                        console.log(`[FOOD-SEO] Created fallback category ID: ${categoryId}`);
                     }
                 }
             }
-        } catch (e) { console.error("[FOOD-SEO] Category lookup failed:", e); }
-        
-        // Final guard: if we still have no category, log it clearly
-        if (!categoryIds || categoryIds.length === 0) {
-            console.error(`[FOOD-SEO] WARNING: No category resolved — post will land in Uncategorized!`);
+        } catch (e) {
+            console.error("[FOOD-SEO] Error resolving category:", e);
+        }
+
+        if (!categoryId) {
+            console.error(`[FOOD-SEO] CRITICAL: Failed to resolve or create category. Post will be Uncategorized.`);
         }
 
         // FIX 4: Fetch or create tags
@@ -1021,7 +1013,7 @@ export async function publishFoodArticleToWPAction(
             content: finalContent,
             status: resolvedStatus,
             slug: generatedSlug,
-            categories: categoryIds,
+            categories: categoryId ? [categoryId] : undefined,
             tags: tagIds.length > 0 ? tagIds : undefined,
             meta: {
                 // FIX 1: Rank Math meta fields
