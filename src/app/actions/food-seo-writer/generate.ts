@@ -885,43 +885,82 @@ export async function publishFoodArticleToWPAction(
             const categoryName = (niche && niche.trim())
                 ? niche.trim()
                 : article.keyword.split(/\s+/).slice(0, 2).join(' ');
+            const categorySlug = categoryName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
             
-            console.log(`[FOOD-SEO] Category lookup using: "${categoryName}"`);
+            console.log(`[FOOD-SEO] Category lookup — name: "${categoryName}", slug: "${categorySlug}"`);
             
+            // Step 1: Search by slug (most precise)
             const catRes = await fetch(
-                `${baseUrl}/wp-json/wp/v2/categories?search=${encodeURIComponent(categoryName)}`,
+                `${baseUrl}/wp-json/wp/v2/categories?slug=${encodeURIComponent(categorySlug)}`,
                 { headers: { "Authorization": authHeader } }
             );
             const cats = await catRes.json();
-
-            // Filter out Uncategorized (id=1) — NEVER fall back to it
             const validCats = Array.isArray(cats) ? cats.filter((c: { id: number; name: string }) => c.id !== 1) : [];
 
             if (validCats.length > 0) {
                 categoryIds = [validCats[0].id];
-                console.log(`[FOOD-SEO] Found existing category: id=${validCats[0].id} name="${validCats[0].name}"`);
+                console.log(`[FOOD-SEO] Found existing category by slug: id=${validCats[0].id} name="${validCats[0].name}"`);
             } else {
-                // No match found — create a proper category
-                const catDisplayName = categoryName.split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                console.log(`[FOOD-SEO] Creating new category: "${catDisplayName}"`);
-                const createCat = await fetch(`${baseUrl}/wp-json/wp/v2/categories`, {
-                    method: "POST",
-                    headers: { "Authorization": authHeader, "Content-Type": "application/json" },
-                    body: JSON.stringify({ name: catDisplayName })
-                });
-                if (createCat.ok) {
-                    const newCat = await createCat.json();
-                    if (newCat.id && newCat.id !== 1) {
-                        categoryIds = [newCat.id];
-                        console.log(`[FOOD-SEO] Created category: id=${newCat.id}`);
-                    }
+                // Step 2: Also search by name (in case slug doesn't match)
+                const catNameRes = await fetch(
+                    `${baseUrl}/wp-json/wp/v2/categories?search=${encodeURIComponent(categoryName)}`,
+                    { headers: { "Authorization": authHeader } }
+                );
+                const catNameResults = await catNameRes.json();
+                const validNameCats = Array.isArray(catNameResults) ? catNameResults.filter((c: { id: number; name: string }) => c.id !== 1) : [];
+
+                if (validNameCats.length > 0) {
+                    categoryIds = [validNameCats[0].id];
+                    console.log(`[FOOD-SEO] Found existing category by name search: id=${validNameCats[0].id} name="${validNameCats[0].name}"`);
                 } else {
-                    // Log full WP error if category creation failed (e.g. permissions)
-                    const errBody = await createCat.text().catch(() => 'Unable to read error body');
-                    console.error(`[FOOD-SEO] Category creation FAILED (${createCat.status}): ${errBody}`);
+                    // Step 3: Create the category
+                    const catDisplayName = categoryName.split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                    console.log(`[FOOD-SEO] Creating new category: "${catDisplayName}" with slug: "${categorySlug}"`);
+                    const createCat = await fetch(`${baseUrl}/wp-json/wp/v2/categories`, {
+                        method: "POST",
+                        headers: { "Authorization": authHeader, "Content-Type": "application/json" },
+                        body: JSON.stringify({ name: catDisplayName, slug: categorySlug })
+                    });
+                    
+                    if (createCat.ok) {
+                        const newCat = await createCat.json();
+                        if (newCat.id && newCat.id !== 1) {
+                            categoryIds = [newCat.id];
+                            console.log(`[FOOD-SEO] Created category: id=${newCat.id}`);
+                        }
+                    } else {
+                        // Handle term_exists error — WP returns the existing term ID in the error body
+                        const errBody = await createCat.text().catch(() => '{}');
+                        console.error(`[FOOD-SEO] Category creation returned ${createCat.status}: ${errBody}`);
+                        try {
+                            const errJson = JSON.parse(errBody);
+                            if (errJson.code === 'term_exists' && errJson.data?.term_id) {
+                                // If the term exists but wasn't found in category search, it's likely a Tag.
+                                // Try creating the category again with a modified slug to avoid conflict.
+                                console.log(`[FOOD-SEO] Category slug conflict (likely a tag exists). Retrying with -cat slug...`);
+                                const retryCreate = await fetch(`${baseUrl}/wp-json/wp/v2/categories`, {
+                                    method: "POST",
+                                    headers: { "Authorization": authHeader, "Content-Type": "application/json" },
+                                    body: JSON.stringify({ name: catDisplayName, slug: categorySlug + '-cat' })
+                                });
+                                if (retryCreate.ok) {
+                                    const retryCat = await retryCreate.json();
+                                    categoryIds = [retryCat.id];
+                                    console.log(`[FOOD-SEO] Successfully created category with modified slug: id=${retryCat.id}`);
+                                } else {
+                                    console.log(`[FOOD-SEO] Second category creation attempt failed:`, await retryCreate.text().catch(()=>''));
+                                }
+                            }
+                        } catch { /* ignore JSON parse error */ }
+                    }
                 }
             }
         } catch (e) { console.error("[FOOD-SEO] Category lookup failed:", e); }
+        
+        // Final guard: if we still have no category, log it clearly
+        if (!categoryIds || categoryIds.length === 0) {
+            console.error(`[FOOD-SEO] WARNING: No category resolved — post will land in Uncategorized!`);
+        }
 
         // FIX 4: Fetch or create tags
         const tagIds: number[] = [];
@@ -971,9 +1010,10 @@ export async function publishFoodArticleToWPAction(
         const generatedSlug = rawSlug.split("-").slice(0, 4).join("-");
         // e.g. "healthy chicken dinner recipes" → "healthy-chicken-dinner-recipes"
 
-        // FIX 3: Explicitly resolve publish status — never rely on fallback
-        const resolvedStatus: 'draft' | 'publish' = publishMode === 'draft' ? 'draft' : 'publish';
-        console.log(`[FOOD-SEO] publishMode received: "${publishMode}" → resolved status: "${resolvedStatus}"`);
+        // FIX 3: Explicitly resolve publish status — never rely on fallback or || operator
+        // Force to string comparison to guard against undefined/null/empty string coming from settings
+        const resolvedStatus: 'draft' | 'publish' = (String(publishMode).trim() === 'draft') ? 'draft' : 'publish';
+        console.log(`[FOOD-SEO] publishMode param received: "${publishMode}" (type: ${typeof publishMode}) → resolvedStatus: "${resolvedStatus}"`);
 
         // Prepare POST body
         const postData: Record<string, unknown> = {
@@ -1018,9 +1058,12 @@ export async function publishFoodArticleToWPAction(
 
         const data = await response.json();
 
-        // FIX 1 fallback: Send Rank Math meta via their dedicated API endpoint
-        // This ensures the focus keyword is set even if WP REST API meta handling fails
+        // FIX 1 — Rank Math Focus Keyword & publishMode persistence
+        // RankMath endpoint to update meta MUST be sent to Rank Math's updateMeta route.
+        // We also resend the status to ensure any PATCH doesn't revert to draft mistakenly.
+
         if (data.id) {
+            // Strategy 1: Rank Math's dedicated REST endpoint (Most reliable if RM is active)
             try {
                 const rankMathRes = await fetch(`${baseUrl}/wp-json/rankmath/v1/updateMeta`, {
                     method: "POST",
@@ -1039,13 +1082,40 @@ export async function publishFoodArticleToWPAction(
                     }),
                 });
                 if (rankMathRes.ok) {
-                    console.log(`[FOOD-SEO] Rank Math meta updated successfully for post ${data.id}`);
+                    console.log(`[FOOD-SEO] Rank Math updateMeta API succeeded for post ${data.id}`);
                 } else {
                     const rmErr = await rankMathRes.text().catch(() => '');
-                    console.warn(`[FOOD-SEO] Rank Math meta update failed (${rankMathRes.status}): ${rmErr}`);
+                    console.warn(`[FOOD-SEO] Rank Math updateMeta failed (${rankMathRes.status}): ${rmErr}`);
                 }
             } catch (rmError) {
-                console.warn(`[FOOD-SEO] Rank Math fallback API not available:`, rmError);
+                console.warn(`[FOOD-SEO] Rank Math updateMeta network error:`, rmError);
+            }
+
+            // Strategy 2: Standard WP REST API PATCH to post meta (with status to prevent reverting)
+            try {
+                const metaPatchRes = await fetch(`${baseUrl}/wp-json/wp/v2/posts/${data.id}`, {
+                    method: "POST", // POST to /wp/v2/posts/:id updates the post
+                    headers: {
+                        "Authorization": authHeader,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        status: resolvedStatus, // STRICT: ALWAYS RE-APPLY STATUS IN ANY PATCH
+                        meta: {
+                            rank_math_focus_keyword: article.keyword,
+                            rank_math_title: seoTitle,
+                            rank_math_description: article.metaDescription,
+                        }
+                    }),
+                });
+                if (metaPatchRes.ok) {
+                    console.log(`[FOOD-SEO] Post meta PATCH successful for post ${data.id}`);
+                } else {
+                    const patchErr = await metaPatchRes.text().catch(() => '');
+                    console.warn(`[FOOD-SEO] Post meta PATCH failed (${metaPatchRes.status}): ${patchErr}`);
+                }
+            } catch (patchError) {
+                console.warn(`[FOOD-SEO] Post meta PATCH network error:`, patchError);
             }
         }
 
