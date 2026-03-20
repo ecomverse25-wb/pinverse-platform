@@ -592,10 +592,10 @@ export default function SetupTab(props: SetupTabProps) {
                     <label style={labelStyle}>Amazon Affiliate Tag (optional)</label>
                     <input type="text" value={settings.amazonAffiliateTag || ''}
                         onChange={e => updateSettings({ amazonAffiliateTag: e.target.value })}
-                        placeholder="e.g. myfoodblog-20"
+                        placeholder="e.g. yourtag-20 — leave blank to skip product links"
                         style={inputStyle} />
                     <p style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
-                        Appended to generated Amazon search URLs for affiliate marketing
+                        If left blank, product mentions will appear as plain bold text without links.
                     </p>
                 </div>
 

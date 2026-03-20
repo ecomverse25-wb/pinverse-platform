@@ -495,10 +495,13 @@ INTERNAL LINKS (insert 2-3 total):
 - Anchor text must be descriptive (never "click here")
 
 AFFILIATE LINKS:
-- Insert after benefit statements, never before
+${(affiliateLinksText || amazonAffiliateTag) ? `- Insert after benefit statements, never before
 - Max 1 per H2 section
 - Format: <a href="https://www.amazon.com/s?k=PRODUCT_NAME_URL_ENCODED${amazonAffiliateTag ? `&tag=${amazonAffiliateTag}` : ''}">Product Name</a>
-- Replace PRODUCT_NAME_URL_ENCODED with a STRICTLY URL-encoded search term. Strip any cooking verbs or adjectives first (e.g. "heavy-duty baking pan" -> "baking+pan", "best blender for smoothies" -> "blender"). Encode spaces as '+'.
+- Replace PRODUCT_NAME_URL_ENCODED with a STRICTLY URL-encoded search term. Strip any cooking verbs or adjectives first (e.g. "heavy-duty baking pan" -> "baking+pan", "best blender for smoothies" -> "blender"). Encode spaces as '+'.` : `- Do NOT generate any affiliate links, Amazon URLs, or product links of any kind.
+- When mentioning kitchen tools or products, wrap the product name in <strong> tags ONLY.
+- Example: <strong>sheet pan</strong> — never wrap in an <a> tag.
+- No <a href="https://amazon.com/..."> or any other product URLs.`}
 
 EXTERNAL LINK (insert exactly 1):
 - Place in the final third of the article
@@ -807,6 +810,7 @@ export async function publishFoodArticleToWPAction(
     wpUrl: string,
     wpUser: string,
     wpPassword: string,
+    niche: string,
     publishMode: 'draft' | 'publish' = 'publish'
 ): Promise<{ success?: boolean; id?: number; link?: string; error?: string }> {
     try {
@@ -875,40 +879,49 @@ export async function publishFoodArticleToWPAction(
             }
         }
 
-        // FIX 4: Fetch or create category dynamically based on the Niche string
+        // FIX 2: Derive category from niche (priority) or first 2 words of keyword — NEVER from title
         let categoryIds: number[] | undefined;
         try {
-            // Niche is passed down in the object but not fully exposed in the article directly. 
-            // We use article.tags if available as the category search, but user explicitly asked to use the niche field.
-            // Since we don't have settings directly here, we will search using the first Tag, or fallback to the keyword.
-            const catSearchTerm = article.tags && article.tags.length > 0 ? article.tags[0] : article.keyword;
-            const searchSlug = catSearchTerm.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+            const categoryName = (niche && niche.trim())
+                ? niche.trim()
+                : article.keyword.split(/\s+/).slice(0, 2).join(' ');
+            
+            console.log(`[FOOD-SEO] Category lookup using: "${categoryName}"`);
             
             const catRes = await fetch(
-                `${baseUrl}/wp-json/wp/v2/categories?search=${encodeURIComponent(searchSlug)}&slug=${encodeURIComponent(searchSlug)}`,
+                `${baseUrl}/wp-json/wp/v2/categories?search=${encodeURIComponent(categoryName)}`,
                 { headers: { "Authorization": authHeader } }
             );
             const cats = await catRes.json();
 
             // Filter out Uncategorized (id=1) — NEVER fall back to it
-            const validCats = Array.isArray(cats) ? cats.filter((c: any) => c.id !== 1) : [];
+            const validCats = Array.isArray(cats) ? cats.filter((c: { id: number; name: string }) => c.id !== 1) : [];
 
             if (validCats.length > 0) {
                 categoryIds = [validCats[0].id];
+                console.log(`[FOOD-SEO] Found existing category: id=${validCats[0].id} name="${validCats[0].name}"`);
             } else {
                 // No match found — create a proper category
-                const catName = catSearchTerm.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                const catDisplayName = categoryName.split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                console.log(`[FOOD-SEO] Creating new category: "${catDisplayName}"`);
                 const createCat = await fetch(`${baseUrl}/wp-json/wp/v2/categories`, {
                     method: "POST",
                     headers: { "Authorization": authHeader, "Content-Type": "application/json" },
-                    body: JSON.stringify({ name: catName })
+                    body: JSON.stringify({ name: catDisplayName })
                 });
                 if (createCat.ok) {
                     const newCat = await createCat.json();
-                    if (newCat.id && newCat.id !== 1) categoryIds = [newCat.id];
+                    if (newCat.id && newCat.id !== 1) {
+                        categoryIds = [newCat.id];
+                        console.log(`[FOOD-SEO] Created category: id=${newCat.id}`);
+                    }
+                } else {
+                    // Log full WP error if category creation failed (e.g. permissions)
+                    const errBody = await createCat.text().catch(() => 'Unable to read error body');
+                    console.error(`[FOOD-SEO] Category creation FAILED (${createCat.status}): ${errBody}`);
                 }
             }
-        } catch (e) { console.error("Category lookup failed", e); }
+        } catch (e) { console.error("[FOOD-SEO] Category lookup failed:", e); }
 
         // FIX 4: Fetch or create tags
         const tagIds: number[] = [];
@@ -949,38 +962,45 @@ export async function publishFoodArticleToWPAction(
             seoTitle = shortB ? `${article.keyword} — ${shortB} | Source Recipes` : `${article.keyword} | Source Recipes`;
         }
         
-        // FIX 9: Generate Slug from Focus Keyword (max 50 chars, max 4 words)
-        let generatedSlug = article.keyword.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-        if (generatedSlug.length > 50) {
-            generatedSlug = generatedSlug.split('-').slice(0, 4).join('-');
-        }
-        if (generatedSlug.length > 50) {
-            generatedSlug = generatedSlug.substring(0, 50).replace(/-[^-]*$/, '');
-        }
+        // FIX 4: Generate Slug from Focus Keyword — ALWAYS max 4 words
+        const rawSlug = article.keyword
+            .toLowerCase()
+            .replace(/[^a-z0-9\s-]/g, "")
+            .trim()
+            .replace(/\s+/g, "-");
+        const generatedSlug = rawSlug.split("-").slice(0, 4).join("-");
+        // e.g. "healthy chicken dinner recipes" → "healthy-chicken-dinner-recipes"
+
+        // FIX 3: Explicitly resolve publish status — never rely on fallback
+        const resolvedStatus: 'draft' | 'publish' = publishMode === 'draft' ? 'draft' : 'publish';
+        console.log(`[FOOD-SEO] publishMode received: "${publishMode}" → resolved status: "${resolvedStatus}"`);
 
         // Prepare POST body
         const postData: Record<string, unknown> = {
             title: article.title,
             content: finalContent,
-            status: publishMode || "publish", // FIX 8: Use publishMode instead of hardcoded 'draft'
-            slug: generatedSlug, // FIX 9
+            status: resolvedStatus,
+            slug: generatedSlug,
             categories: categoryIds,
             tags: tagIds.length > 0 ? tagIds : undefined,
-            // excerpt: article.metaDescription, // Fix 1: Don't put it in the WP excerpt unless requested, standard is Rank Math
             meta: {
-                // FIX 1 & 2 & 3: Rank Math meta fields and PIN Data
-                pin_title: article.pinTitle || "",
-                pin_description: article.pinDescription || "",
+                // FIX 1: Rank Math meta fields
                 rank_math_focus_keyword: article.keyword,
                 rank_math_title: seoTitle,
                 rank_math_description: article.metaDescription,
                 rank_math_facebook_title: article.title,
                 rank_math_facebook_description: article.metaDescription,
-                rank_math_twitter_use_facebook: "on"
+                rank_math_twitter_use_facebook: "on",
+                // Pinterest meta
+                pin_title: article.pinTitle || "",
+                pin_description: article.pinDescription || "",
             }
         };
 
         if (featuredMediaId) postData.featured_media = featuredMediaId;
+
+        // FIX 1: Debug log — print full postData before sending to WP
+        console.error(`[FOOD-SEO] Full postData being sent to WordPress:\n${JSON.stringify(postData, null, 2)}`);
 
         const response = await fetch(`${baseUrl}/wp-json/wp/v2/posts`, {
             method: "POST",
@@ -997,6 +1017,38 @@ export async function publishFoodArticleToWPAction(
         }
 
         const data = await response.json();
+
+        // FIX 1 fallback: Send Rank Math meta via their dedicated API endpoint
+        // This ensures the focus keyword is set even if WP REST API meta handling fails
+        if (data.id) {
+            try {
+                const rankMathRes = await fetch(`${baseUrl}/wp-json/rankmath/v1/updateMeta`, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": authHeader,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        objectID: data.id,
+                        objectType: "post",
+                        meta: {
+                            rank_math_focus_keyword: article.keyword,
+                            rank_math_title: seoTitle,
+                            rank_math_description: article.metaDescription,
+                        }
+                    }),
+                });
+                if (rankMathRes.ok) {
+                    console.log(`[FOOD-SEO] Rank Math meta updated successfully for post ${data.id}`);
+                } else {
+                    const rmErr = await rankMathRes.text().catch(() => '');
+                    console.warn(`[FOOD-SEO] Rank Math meta update failed (${rankMathRes.status}): ${rmErr}`);
+                }
+            } catch (rmError) {
+                console.warn(`[FOOD-SEO] Rank Math fallback API not available:`, rmError);
+            }
+        }
+
         return { success: true, id: data.id, link: data.link };
     } catch (error: unknown) {
         console.error("Publishing Food Article error:", error);

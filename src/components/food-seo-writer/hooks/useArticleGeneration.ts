@@ -298,7 +298,7 @@ export function useArticleGeneration({
             setStatusMessage(`📤 Publishing... ${i + 1}/${readyArticles.length}`);
             const art = readyArticles[i];
             try {
-                const result = await publishFoodArticleToWPAction(art, wpUrl, wpUser, wpPassword, settings.publishMode);
+                const result = await publishFoodArticleToWPAction(art, wpUrl, wpUser, wpPassword, settings.niche, settings.publishMode);
                 if (result.success) {
                     const idx = articles.indexOf(art);
                     if (idx !== -1) updateArticle(idx, { ...art, status: "published", wpLink: result.link, wpPostId: result.id });
