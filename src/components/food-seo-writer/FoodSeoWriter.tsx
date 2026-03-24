@@ -109,8 +109,19 @@ export default function FoodSeoWriter() {
         const parsed = JSON.parse(saved);
         if (parsed.inputs) setInputs((prev) => ({ ...prev, ...parsed.inputs }));
         if (parsed.provider) {
-          // Merge core provider settings, but overwrite API keys with specific key storage
+          // Merge core provider settings
           const p = { ...DEFAULT_PROVIDER, ...parsed.provider } as ProviderSettings;
+          
+          // Validate models exist in constants, otherwise fallback
+          const validContentModels = CONTENT_MODELS[p.contentProvider] || [];
+          if (!validContentModels.some(m => m.value === p.contentModel)) {
+            p.contentModel = validContentModels[0]?.value || DEFAULT_PROVIDER.contentModel;
+          }
+          const validImageModels = IMAGE_MODELS[p.imageProvider] || [];
+          if (!validImageModels.some(m => m.value === p.imageModel)) {
+            p.imageModel = validImageModels[0]?.value || DEFAULT_PROVIDER.imageModel;
+          }
+
           const contentKey = localStorage.getItem(`pinverse_content_api_key_${p.contentProvider}`);
           if (contentKey) p.contentApiKey = contentKey;
           const imageKey = localStorage.getItem(`pinverse_image_api_key_${p.imageProvider}`);
