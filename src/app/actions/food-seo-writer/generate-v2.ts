@@ -695,34 +695,62 @@ export async function generateImageAction(
     let imageUrl = "";
     if (config.imageProvider === "gemini") {
       const gApiKey = apiKey || process.env.GEMINI_API_KEY || "";
-      const response = await fetch(
+      // Correct REST call per official Gemini image generation docs
+      const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${config.imageModel}:generateContent?key=${gApiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+            contents: [{
+              parts: [{ text: prompt }]
+            }],
+            generationConfig: {
+              responseModalities: ["TEXT", "IMAGE"]
+            }
           }),
         }
       );
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.error?.message ?? `Gemini image API error: ${response.status}`);
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error?.message ?? `Gemini API error ${res.status}`);
       }
-      // Extract base64 image from response
+
+      // Extract image from response parts
       const parts = data?.candidates?.[0]?.content?.parts ?? [];
-      const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
-      if (!imagePart) {
-        throw new Error("Gemini returned no image in response. Check model supports image output.");
+      const imagePart = parts.find(
+        (p: any) => p.inlineData?.mimeType?.startsWith('image/')
+      );
+
+      if (!imagePart?.inlineData?.data) {
+        // Log full response for debugging
+        console.error('Gemini image response (no image found):', JSON.stringify(data, null, 2));
+        throw new Error(
+          `Gemini returned no image. Response had ${parts.length} parts: ${parts.map((p: any) => p.text ? 'text' : p.inlineData ? `image(${p.inlineData.mimeType})` : 'unknown').join(', ')}`
+        );
       }
+
       const base64Data = imagePart.inlineData.data;
       const mimeType = imagePart.inlineData.mimeType;
-      // Upload to ImgBB if key available, otherwise return data URI
+
+      // Upload to ImgBB if key is available, otherwise return data URI
       if (imgbbKey) {
-        const upload = await uploadToImgBBAction(base64Data, imgbbKey, title);
-        if (!upload.success) throw new Error(`ImgBB Upload Failed: ${upload.error}`);
-        imageUrl = upload.url!;
+        const formData = new FormData();
+        formData.append('image', base64Data);
+        const imgbbRes = await fetch(
+          `https://api.imgbb.com/1/upload?key=${imgbbKey}`,
+          { method: 'POST', body: formData }
+        );
+        const imgbbData = await imgbbRes.json();
+        if (imgbbData?.data?.url) {
+          imageUrl = imgbbData.data.url;
+        } else {
+          console.error('ImgBB upload failed:', JSON.stringify(imgbbData));
+          // Fall through to data URI if ImgBB fails
+          imageUrl = `data:${mimeType};base64,${base64Data}`;
+        }
       } else {
         imageUrl = `data:${mimeType};base64,${base64Data}`;
       }
@@ -786,20 +814,24 @@ export async function testImageApiKey(
 
   try {
     if (imageProvider === "gemini") {
-      // Test using generateContent with image modalities — same endpoint as real generation
       const testRes = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${imageModel}:generateContent?key=${apiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: "Generate a simple red circle." }] }],
-            generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+            contents: [{ parts: [{ text: "A single red apple on a white background." }] }],
+            generationConfig: {
+              responseModalities: ["TEXT", "IMAGE"]
+            }
           }),
         }
       );
       const testData = await testRes.json();
       if (!testRes.ok) throw new Error(testData?.error?.message ?? `Status ${testRes.status}`);
+      const parts = testData?.candidates?.[0]?.content?.parts ?? [];
+      const hasImage = parts.some((p: any) => p.inlineData?.mimeType?.startsWith('image/'));
+      if (!hasImage) throw new Error(`API responded but returned no image. Parts: ${JSON.stringify(parts.map((p: any) => Object.keys(p)))}`);
       return { success: true };
     } else if (imageProvider === "replicate") {
       // Test by checking the model exists
