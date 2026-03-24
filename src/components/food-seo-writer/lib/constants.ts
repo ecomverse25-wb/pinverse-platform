@@ -246,10 +246,11 @@ export const PINTEREST_IMAGE_RATIO = "2:3";
 
 export const CONTENT_MODELS: Record<ContentProvider, { value: string; label: string; description: string }[]> = {
   gemini: [
-    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", description: "Most capable. Deep reasoning and coding. Excellent for complex tasks." },
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", description: "Best price-performance, fast with reasoning." },
-    { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite", description: "Fastest and most budget-friendly." },
-    { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash", description: "Multimodal, cost-effective general purpose." },
+    { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview", description: "Latest. Best reasoning, coding, agentic workflows. Feb 2026." },
+    { value: "gemini-3-flash-preview", label: "Gemini 3 Flash Preview", description: "Most powerful multimodal. Best for vibe-coding. Dec 2025." },
+    { value: "gemini-3.1-flash-lite-preview", label: "Gemini 3.1 Flash-Lite Preview", description: "Fastest & cheapest. High-volume tasks. Mar 2026." },
+    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", description: "Stable flagship. Deep reasoning. Best for production." },
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", description: "Stable. Best price-performance for reasoning tasks." },
   ],
   openai: [
     { value: "gpt-5.4", label: "GPT-5.4", description: "Frontier model. 1M context, computer use, tool search. Released Mar 5, 2026." },
@@ -281,9 +282,8 @@ export const CONTENT_MODELS: Record<ContentProvider, { value: string; label: str
 
 export const IMAGE_MODELS: Record<ImageProvider, { value: string; label: string; description: string }[]> = {
   gemini: [
-    { value: "imagen-4-fast", label: "Imagen 4 Fast", description: "Speed-optimized image generation." },
-    { value: "imagen-4-standard", label: "Imagen 4 Standard", description: "Balanced quality image generation." },
-    { value: "gemini-3-pro-image-preview", label: "Gemini 3 Pro Image", description: "High-fidelity with reasoning-enhanced composition." },
+    { value: "gemini-3.1-flash-image-preview", label: "Nano Banana 2 (Fast)", description: "High-efficiency image generation. Fast & affordable. Feb 2026." },
+    { value: "gemini-3-pro-image-preview", label: "Nano Banana Pro (Studio)", description: "Studio-quality 4K. Complex layouts, precise text. Nov 2025." },
   ],
   replicate: [
     { value: "ideogram-ai/ideogram-v2-turbo", label: "Ideogram", description: "Excellent text rendering in images." },

@@ -547,9 +547,11 @@ function buildSeoChecklist(
     details: `${imgAltWithKw.length} of ${imgAlts.length} images have keyword in alt text`,
   });
 
-  // Internal/external links
-  const internalLinks = (content.match(/<a\s[^>]*href="(?!https?:\/\/)/gi) || []).length;
-  const externalLinks = (content.match(/<a\s[^>]*href="https?:\/\//gi) || []).length;
+  // Internal/external links — only count absolute URLs, NOT relative /slug links (those are fabricated and stripped)
+  const allLinks = content.match(/<a\s[^>]*href="https?:\/\/[^"]+"/gi) || [];
+  // Internal = links to WP site domain (e.g. sourcerecipes.info)
+  const internalLinks = allLinks.filter(l => /sourcerecipes\.info|localhost/i.test(l)).length;
+  const externalLinks = allLinks.length - internalLinks;
   checks.push({
     name: "At least 2 internal + 1 external link",
     passed: internalLinks >= 2 && externalLinks >= 1,

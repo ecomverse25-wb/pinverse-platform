@@ -16,10 +16,10 @@ const STORAGE_KEY = "food-seo-writer-v2-settings";
 
 const DEFAULT_PROVIDER: ProviderSettings = {
   contentProvider: "gemini",
-  contentModel: "gemini-2.5-flash",
+  contentModel: "gemini-2.5-pro",
   contentApiKey: "",
   imageProvider: "gemini",
-  imageModel: "imagen-4-fast",
+  imageModel: "gemini-3.1-flash-image-preview",
   imageApiKey: "",
   useSharedKey: true,
 };

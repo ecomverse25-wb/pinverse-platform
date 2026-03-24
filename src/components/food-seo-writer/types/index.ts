@@ -423,12 +423,12 @@ export interface ArticleSchema {
   "@type": "Article";
   headline: string;
   description: string;
-  image: string;
-  author: { "@type": "Person"; name: string; url: string };
-  publisher: {
+  image?: string;
+  author?: { "@type": "Person"; name: string; url?: string };
+  publisher?: {
     "@type": "Organization";
     name: string;
-    logo: { "@type": "ImageObject"; url: string };
+    logo?: { "@type": "ImageObject"; url: string };
   };
   datePublished: string;
   dateModified: string;

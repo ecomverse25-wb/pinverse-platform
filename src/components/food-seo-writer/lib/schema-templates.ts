@@ -228,6 +228,12 @@ export function generateFaqSchema(
 
 // ─── 3.3 Article JSON-LD Generation ───
 
+/** Returns undefined if value is a placeholder like [Author Name] or [Image URL] */
+function cleanField(value: string | undefined): string | undefined {
+  if (!value || (value.includes("[") && value.includes("]"))) return undefined;
+  return value;
+}
+
 export function generateArticleSchema(
   title: string,
   metaDescription: string,
@@ -241,25 +247,41 @@ export function generateArticleSchema(
   const validations: SchemaValidation[] = [];
   const today = new Date().toISOString().split("T")[0];
 
+  const cleanAuthorName = cleanField(authorName);
+  const cleanAuthorUrl = cleanField(authorUrl);
+  const cleanSiteName = cleanField(siteName);
+  const cleanLogoUrl = cleanField(siteLogoUrl);
+  const cleanImage = cleanField(featuredImageUrl);
+
   const schema: ArticleSchema = {
     "@context": "https://schema.org",
     "@type": "Article",
     headline: title,
     description: metaDescription,
-    image: featuredImageUrl,
-    author: {
-      "@type": "Person",
-      name: authorName,
-      url: authorUrl,
-    },
-    publisher: {
-      "@type": "Organization",
-      name: siteName,
-      logo: {
-        "@type": "ImageObject",
-        url: siteLogoUrl,
-      },
-    },
+    // Omit image if placeholder
+    ...(cleanImage ? { image: cleanImage } : {}),
+    // Omit author if name is placeholder
+    ...(cleanAuthorName
+      ? {
+          author: {
+            "@type": "Person" as const,
+            name: cleanAuthorName,
+            ...(cleanAuthorUrl ? { url: cleanAuthorUrl } : {}),
+          },
+        }
+      : {}),
+    // Omit publisher if name is placeholder
+    ...(cleanSiteName
+      ? {
+          publisher: {
+            "@type": "Organization" as const,
+            name: cleanSiteName,
+            ...(cleanLogoUrl
+              ? { logo: { "@type": "ImageObject" as const, url: cleanLogoUrl } }
+              : {}),
+          },
+        }
+      : {}),
     datePublished: today,
     dateModified: today,
     mainEntityOfPage: {

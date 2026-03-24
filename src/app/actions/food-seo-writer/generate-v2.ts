@@ -323,11 +323,12 @@ ${inputs.advanced.includeNutritionInfo ? "Include Nutrition Info: YES" : ""}
 TEMPLATE TO FOLLOW:
 ${templateInstructions}
 
-CONTENT STRUCTURE RULES:
-- H1 TITLES: Do NOT include an H1 tag in your output. The article title is rendered separately by the page. Start your content directly with the introduction paragraph, then use H2 tags for sections.
-- ANSWER-FIRST RULE (MANDATORY): Every H2 section MUST begin with a direct, declarative answer sentence in the FIRST sentence after the H2 heading. The first sentence must directly answer what the heading implies. Do NOT start sections with anecdotes, questions, or transitional phrases. Lead with the answer, then elaborate.
-- VOCABULARY DIVERSITY (MANDATORY): Avoid repeating the same adjective, verb, or descriptive phrase more than twice in the entire article. Do not use 'superb', 'fantastic', 'brilliant', 'delectable', 'compelling', 'exceptional' more than once each. Vary your word choices. Use a thesaurus-level range of vocabulary. If you catch yourself using the same descriptor twice, replace one instance with a synonym.
-- INTERNAL LINKS: You may include internal links ONLY to the user's specified blog URL categories and topics. If the user has provided internal link topics, use ONLY those. Format all internal links as: <a href='/[topic-slug]'>[anchor text]</a> where [topic-slug] is derived ONLY from the user's provided topics. If no internal link topics are provided, include ZERO internal links — do not invent URLs.
+CONTENT STRUCTURE (MANDATORY):
+- Do NOT output an H1 tag anywhere. Start directly with the introduction.
+- ANSWER-FIRST RULE (MANDATORY): Every H2 section MUST begin with a direct, declarative answer sentence as the FIRST sentence after the H2 heading. Do NOT start sections with anecdotes, questions, or transitional phrases. Lead with the answer, then elaborate.
+- VOCABULARY DIVERSITY (MANDATORY): Avoid repeating the same adjective, verb, or descriptive phrase more than twice in the entire article. Do not use 'superb', 'fantastic', 'brilliant', 'delectable', 'compelling', 'exceptional' more than once each. Vary your word choices. Use a thesaurus-level range of vocabulary.
+- INTERNAL LINKS: You may include internal links ONLY to exact URLs provided by the user in the Internal Link Topics field. If no topics are provided, include ZERO internal links. Never invent slugs.
+- For Recipe Roundup/Listicle articles: write each recipe as its own H2 section following this exact pattern: (1) H2 heading with recipe name and a descriptive subtitle after an em-dash, (2) one paragraph of vivid sensory description, (3) one paragraph with the focus keyword bolded in a <strong> tag, (4) an image placeholder <figure><img src='image-placeholder' alt='[recipe name — subtitle]' data-pin-description='[1-sentence pinterest description]' /></figure>, (5) one practical tip paragraph starting with 'Practical tip:'.
 - Opening hook: 2-3 sentences, include main keyword naturally
 - Personal story: 100-200 words max (not 500-word life stories — readers hate this)
 - Jump to Recipe note: "Jump to Recipe" anchor link after intro
@@ -353,7 +354,7 @@ ${inputs.advanced.includeRecipeCard ? `- Recipe card: Full structured recipe usi
   - [Make-ahead tips]
   - [Scaling notes]` : ""}
 ${inputs.advanced.includeFaqSection ? "- FAQ section: 5-7 questions with concise answers (50-100 words each)" : ""}
-- Conclusion: 2-3 sentences with call-to-action
+- Conclusion: 2-3 sentences with call-to-action. End every article with a closing paragraph containing one internal link to a user-provided category URL (if available).
 
 ${productLinksSection}
 ${productCatalogSection}
@@ -364,8 +365,8 @@ OUTLINE TO FOLLOW:
 ${research.outline.map((h: OutlineHeading) => `${h.level.toUpperCase()}: ${h.text} (~${h.plannedWordCount} words)`).join("\n")}
 
 IMAGE PLACEHOLDERS:
-After each H2 heading, before the first paragraph, insert a markdown image placeholder:
-![Descriptive alt text with keyword variation](image-placeholder)
+After each H2 heading, insert an image placeholder using this EXACT HTML format:
+<figure><img src="image-placeholder" alt="[descriptive alt text with keyword variation]" data-pin-description="[1-sentence pinterest description]" /></figure>
 Include at least 5 image placeholders throughout the article. Each alt text must be unique and descriptive.
 
 KEYWORD DISTRIBUTION:
@@ -694,39 +695,37 @@ export async function generateImageAction(
     let imageUrl = "";
     if (config.imageProvider === "gemini") {
       const gApiKey = apiKey || process.env.GEMINI_API_KEY || "";
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${config.imageModel}:generateImages?key=${gApiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          instances: [{ prompt: prompt }], // User suggested { prompt: {text: ...} } but instances is standard, let's use the { prompt: { text } } format if it fails fallback. Oh actually let me use what user literally asked:
-          // "Confirm the request body includes { "prompt": { "text": "..." }, "number_of_images": 1 }"
-          prompt: { text: prompt },
-          // Gemini API usually needs sampleCount or number_of_images depending on the model tier/endpoint format
-          // Adding both formats just to be safe: 
-          number_of_images: 1
-        })
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error?.message || `Gemini Image API Error HTTP ${response.status}`);
-      }
-
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${config.imageModel}:generateContent?key=${gApiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+          }),
+        }
+      );
       const data = await response.json();
-      
-      // Look for the base64 output
-      let b64 = "";
-      if (data.generatedImages && data.generatedImages.length > 0 && data.generatedImages[0].image?.imageBytes) {
-        b64 = data.generatedImages[0].image.imageBytes; // New SDK-style shape
-      } else if (data.predictions && data.predictions.length > 0 && data.predictions[0].bytesBase64Encoded) {
-        b64 = data.predictions[0].bytesBase64Encoded;   // Classic Vertex/Imagen shape
-      } else {
-        throw new Error("No image data returned from Gemini API.");
+      if (!response.ok) {
+        throw new Error(data?.error?.message ?? `Gemini image API error: ${response.status}`);
       }
-      
-      const upload = await uploadToImgBBAction(b64, imgbbKey, title);
-      if (!upload.success) throw new Error(`ImgBB Upload Failed: ${upload.error}`);
-      imageUrl = upload.url!;
+      // Extract base64 image from response
+      const parts = data?.candidates?.[0]?.content?.parts ?? [];
+      const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
+      if (!imagePart) {
+        throw new Error("Gemini returned no image in response. Check model supports image output.");
+      }
+      const base64Data = imagePart.inlineData.data;
+      const mimeType = imagePart.inlineData.mimeType;
+      // Upload to ImgBB if key available, otherwise return data URI
+      if (imgbbKey) {
+        const upload = await uploadToImgBBAction(base64Data, imgbbKey, title);
+        if (!upload.success) throw new Error(`ImgBB Upload Failed: ${upload.error}`);
+        imageUrl = upload.url!;
+      } else {
+        imageUrl = `data:${mimeType};base64,${base64Data}`;
+      }
     } else {
       const rep = new Replicate({ auth: apiKey || process.env.REPLICATE_API_KEY || "" });
       const output = await rep.run(config.imageModel as `${string}/${string}`, { input: { prompt } }) as string[] | ReadableStream;
@@ -787,16 +786,20 @@ export async function testImageApiKey(
 
   try {
     if (imageProvider === "gemini") {
-      // Test by listing models — this validates the key without generating an image
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
-        { method: "GET" }
+      // Test using generateContent with image modalities — same endpoint as real generation
+      const testRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${imageModel}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: "Generate a simple red circle." }] }],
+            generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+          }),
+        }
       );
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        const msg = data?.error?.message || `HTTP ${response.status}`;
-        return { success: false, error: `Gemini API key invalid: ${msg}` };
-      }
+      const testData = await testRes.json();
+      if (!testRes.ok) throw new Error(testData?.error?.message ?? `Status ${testRes.status}`);
       return { success: true };
     } else if (imageProvider === "replicate") {
       // Test by checking the model exists
