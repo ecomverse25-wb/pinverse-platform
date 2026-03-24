@@ -431,6 +431,11 @@ Do NOT wrap in code fences. Do NOT include <html>, <head>, or <body> tags.`;
     // Count words
     const wordCount = content.replace(/<[^>]*>/g, " ").split(/\s+/).filter(Boolean).length;
 
+    // Polish Fix 1: Strip leading H1 from final output
+    content = content
+      .replace(/^\s*<h1[^>]*>[\s\S]*?<\/h1>\s*/i, "")
+      .trimStart();
+
     return {
       success: true,
       content,
@@ -708,6 +713,8 @@ export async function generateImageAction(
   const prompt = promptTemplate
     .replace("{title}", title)
     .replace("{content}", contentSummary) + ` Style: ${style}. ${colorMood ? `Mood: ${colorMood}.` : ""}`;
+
+  console.log(`[Image] type=${imageType} aspectRatio=${IMAGE_SPECS[imageType].aspectRatio}`);
 
   const apiKey = config.useSharedKey && config.imageProvider === config.contentProvider ? config.contentApiKey : config.imageApiKey;
 

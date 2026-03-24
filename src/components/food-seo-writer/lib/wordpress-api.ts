@@ -73,7 +73,7 @@ export async function publishToWordPress(options: WordPressPublishOptions): Prom
     const postData: Record<string, any> = {
       title,
       content: finalContent,
-      status: settings.publishingMode || "draft",
+      status: settings.publishingMode === "draft" ? "draft" : "publish",
     };
 
     if (excerpt) {

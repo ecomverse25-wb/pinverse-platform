@@ -198,13 +198,19 @@ export function useContentGeneration() {
           );
 
           if (pinResult.success && pinResult.result) {
+            // Extract featured image URL from generated article
+            const featuredImgMatch = finalContent.match(
+              /<figure[^>]*class=["'][^"']*featured-image[^"']*["'][^>]*>[\s\S]*?<img[^>]*src=["']([^"']+)["']/i
+            );
+            const featuredImageUrl = featuredImgMatch?.[1] ?? '';
+
             pinterestResult = {
               pinTitles: pinResult.result.pinTitles.map((t, i) => ({ index: i, ...t })),
               pinDescriptions: pinResult.result.pinDescriptions.map((d, i) => ({ index: i, ...d })),
               tobiOverlays: pinResult.result.tobiOverlays.map((t, i) => ({ index: i, ...t })),
               boardSuggestions: pinResult.result.boardSuggestions,
               hiddenPins: pinResult.result.hiddenPins,
-              ogMetaTags: `<meta property="og:title" content="${finalTitle}" />\n<meta property="og:description" content="${finalMeta}" />\n<meta property="og:type" content="article" />\n<meta property="og:image" content="[Featured Image URL]" />`,
+              ogMetaTags: `<meta property="og:title" content="${finalTitle}" />\n<meta property="og:description" content="${finalMeta}" />\n<meta property="og:type" content="article" />\n<meta property="og:image" content="${featuredImageUrl}" />`,
               dataPinDescriptions: pinResult.result.pinDescriptions.map((d) => d.text),
               pinImages: [],
             };
@@ -601,6 +607,12 @@ function buildSchemas(content: GeneratedContent, inputs: FormInputs): SchemaResu
     faqValidation = [{ status: "warning" as const, message: "No FAQ section found in content" }];
   }
 
+  // Extract featured image from generated article
+  const featuredImgMatch = content.articleHtml.match(
+    /<figure[^>]*class=["'][^"']*featured-image[^"']*["'][^>]*>[\s\S]*?<img[^>]*src=["']([^"']+)["']/i
+  );
+  const featuredImageUrl = featuredImgMatch?.[1] || undefined;
+
   // Article schema (always generated)
   const a = generateArticleSchema(
     content.title,
@@ -609,7 +621,7 @@ function buildSchemas(content: GeneratedContent, inputs: FormInputs): SchemaResu
     undefined,
     undefined,
     undefined,
-    undefined,
+    featuredImageUrl,
     inputs.core.targetSite ? `${inputs.core.targetSite}/${content.urlSlug}` : undefined
   );
 
