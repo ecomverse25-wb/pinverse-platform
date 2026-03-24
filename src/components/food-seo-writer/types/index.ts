@@ -364,6 +364,7 @@ export interface PinterestCopyResult {
   hiddenPins: HiddenPinCopy[];
   ogMetaTags: string;
   dataPinDescriptions: string[];
+  pinImages?: GeneratedImage[];
 }
 
 // ─── Schema Types (Section 3) ───
@@ -372,12 +373,12 @@ export interface RecipeSchema {
   "@context": string;
   "@type": "Recipe";
   name: string;
-  image: string[];
-  author: { "@type": "Person"; name: string };
+  image?: string[];
+  author?: { "@type": "Person"; name: string };
   datePublished: string;
   description: string;
   prepTime: string;
-  cookTime: string;
+  cookTime?: string;
   totalTime: string;
   recipeYield: string;
   recipeCategory: string;
@@ -525,6 +526,7 @@ export interface BulkPinCsvRow {
   board_name: string;
   tobi_text: string;
   image_alt: string;
+  image_url?: string;
 }
 
 // ─── Full Pipeline Result ───

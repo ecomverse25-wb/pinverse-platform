@@ -22,6 +22,7 @@ import {
   generateContentAction,
   optimizeSeoAction,
   generatePinterestCopyAction,
+  generateImageAction,
 } from "@/app/actions/food-seo-writer/generate-v2";
 import {
   generateRecipeSchema,
@@ -131,7 +132,8 @@ export function useContentGeneration() {
             finalContentHtml,
             contentResult.title || researchResult.result.title,
             inputs,
-            provider
+            provider,
+            addLog
           );
 
           if (imageResult.success) {
@@ -204,8 +206,49 @@ export function useContentGeneration() {
               hiddenPins: pinResult.result.hiddenPins,
               ogMetaTags: `<meta property="og:title" content="${finalTitle}" />\n<meta property="og:description" content="${finalMeta}" />\n<meta property="og:type" content="article" />\n<meta property="og:image" content="[Featured Image URL]" />`,
               dataPinDescriptions: pinResult.result.pinDescriptions.map((d) => d.text),
+              pinImages: [],
             };
             addLog(`✓ Pinterest copy: ${pinResult.result.pinTitles.length} variants generated`);
+
+            // FIX 3: Pinterest Pin Image Generation
+            if (inputs.imageSettings.enabled) {
+              const numVariants = Math.min(3, pinResult.result.pinTitles.length);
+              addLog(`Generating ${numVariants} Pinterest pin 1000x1500 images...`);
+              
+              const pinImages: GeneratedImage[] = [];
+              for (let i = 0; i < numVariants; i++) {
+                const pinTitle = pinResult.result.pinTitles[i].text;
+                const promptTemplate = inputs.imageSettings.promptInstructions;
+                
+                const result = await generateImageAction(
+                  pinTitle,
+                  `Pinterest pin image for: ${pinTitle}. Food photography style. 1000x1500 vertical format. High contrast text overlay area at bottom.`,
+                  promptTemplate,
+                  inputs.imageSettings.style,
+                  inputs.imageSettings.colorMood,
+                  "Pinterest Portrait 2:3",
+                  provider as any,
+                  inputs.imageSettings.imgbbApiKey
+                );
+                
+                if (result.success && result.imageUrl) {
+                  pinImages.push({
+                    sectionHeading: `Pin Variant ${i + 1}`,
+                    altText: pinTitle,
+                    hostedUrl: result.imageUrl
+                  });
+                } else {
+                  const warnMsg = `[Image Warning] Pin image generation failed: ${result.error || "Unknown error"} — continuing without image`;
+                  console.error(warnMsg);
+                  addLog(warnMsg);
+                }
+              }
+              
+              if (pinImages.length > 0) {
+                pinterestResult.pinImages = pinImages;
+                addLog(`✓ Pin image generation complete. Added ${pinImages.length} images.`);
+              }
+            }
           } else {
             pinterestResult = createEmptyPinterest();
             addLog("⚠ Pinterest copy generation failed — using empty defaults");
@@ -588,5 +631,6 @@ function createEmptyPinterest(): PinterestCopyResult {
     hiddenPins: [],
     ogMetaTags: "",
     dataPinDescriptions: [],
+    pinImages: [],
   };
 }

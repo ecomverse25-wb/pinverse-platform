@@ -49,20 +49,25 @@ export function generateRecipeSchema(
 ): { schema: RecipeSchema; validations: SchemaValidation[] } {
   const validations: SchemaValidation[] = [];
 
-  // Build schema
+  // Build schema — FIX 7: omit placeholder fields instead of outputting literal placeholders
+  const isPlaceholderImage = !imageUrl || imageUrl === "[Image URL]";
+  const isPlaceholderAuthor = !authorName || authorName === "[Author Name]";
+  const parsedCookTime = toISO8601Duration(recipe.cookTime);
+  const isNoCook = parsedCookTime === "PT0M";
+
   const schema: RecipeSchema = {
     "@context": "https://schema.org/",
     "@type": "Recipe",
     name: recipe.name || articleTitle,
-    image: [imageUrl],
-    author: {
-      "@type": "Person",
-      name: authorName,
-    },
+    // Omit image if placeholder
+    ...(isPlaceholderImage ? {} : { image: [imageUrl] }),
+    // Omit author if placeholder
+    ...(isPlaceholderAuthor ? {} : { author: { "@type": "Person" as const, name: authorName } }),
     datePublished: new Date().toISOString().split("T")[0],
     description: metaDescription || recipe.description || "",
     prepTime: toISO8601Duration(recipe.prepTime),
-    cookTime: toISO8601Duration(recipe.cookTime),
+    // Omit cookTime if PT0M (no-cook/blended recipe)
+    ...(isNoCook ? {} : { cookTime: parsedCookTime }),
     totalTime: toISO8601Duration(recipe.totalTime),
     recipeYield: recipe.servings || "4 servings",
     recipeCategory: "Dinner", // Can be overridden
@@ -99,10 +104,10 @@ export function generateRecipeSchema(
   if (!schema.name) {
     validations.push({ status: "error", message: "Recipe name is required", field: "name" });
   }
-  if (!schema.image[0] || schema.image[0] === "[Image URL]") {
+  if (!schema.image || schema.image.length === 0 || schema.image[0] === "[Image URL]") {
     validations.push({
-      status: "error",
-      message: "At least 1 image URL is required",
+      status: "warning",
+      message: "⚠ Add your featured image URL to the Recipe Schema image field before submitting to Google.",
       field: "image",
     });
   }
@@ -127,10 +132,10 @@ export function generateRecipeSchema(
       field: "prepTime",
     });
   }
-  if (!schema.cookTime || schema.cookTime === "PT0M") {
+  if (!schema.cookTime) {
     validations.push({
-      status: "error",
-      message: "Cook time is required in ISO 8601 format",
+      status: "warning",
+      message: "Cook time omitted (no-cook/blended recipe) — this is acceptable for Google.",
       field: "cookTime",
     });
   }

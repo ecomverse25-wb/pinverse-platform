@@ -13,7 +13,8 @@ export function useImageGeneration() {
     articleHtml: string,
     title: string,
     inputs: FormInputs,
-    provider: ProviderSettings
+    provider: ProviderSettings,
+    onLog?: (msg: string) => void
   ): Promise<{ success: boolean; updatedHtml: string; generatedImages: GeneratedImage[]; error?: string }> => {
     if (!inputs.imageSettings.enabled) {
       return { success: true, updatedHtml: articleHtml, generatedImages: [] };
@@ -101,9 +102,12 @@ export function useImageGeneration() {
             isFeatured,
           });
         } else {
-          console.error(`Failed to generate image ${i + 1}:`, result.error);
+          const warnMsg = `[Image Warning] Image generation failed: ${result.error || "Unknown error"} — continuing without image`;
+          console.error(warnMsg);
+          if (onLog) onLog(warnMsg);
+          
           // Bug Fix 3: Replace broken image icons with styled placeholder divs
-          const fallbackHtml = `\\n<div class="image-placeholder" style="background:#1e293b; border:2px dashed #475569; padding:40px; text-align:center; color:#94a3b8; border-radius:8px; margin:20px 0;">\\n  <span style="font-size:24px;">🖼️</span><br/>\\n  <span style="font-weight:bold; margin-top:8px; display:block;">AI image will be generated here</span>\\n  <p style="font-size:12px; margin-top:4px;">${ph.altText}</p>\\n</div>\\n`;
+          const fallbackHtml = `\n<div class="image-placeholder" style="background:#1e293b; border:2px dashed #475569; padding:40px; text-align:center; color:#94a3b8; border-radius:8px; margin:20px 0;">\n  <span style="font-size:24px;">🖼️</span><br/>\n  <span style="font-weight:bold; margin-top:8px; display:block;">AI image will be generated here</span>\n  <p style="font-size:12px; margin-top:4px;">${ph.altText}</p>\n</div>\n`;
           updatedHtml = updatedHtml.replace(ph.original, fallbackHtml);
         }
       }

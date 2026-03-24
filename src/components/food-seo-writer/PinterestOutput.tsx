@@ -29,7 +29,6 @@ function CopyBtn({ text }: { text: string }) {
 
 interface PinterestOutputProps {
   pinterest: PinterestCopyResult;
-  images?: { hostedUrl: string; altText: string }[];
 }
 
 const sectionTitle: React.CSSProperties = {
@@ -48,7 +47,8 @@ const itemCard: React.CSSProperties = {
   marginBottom: 8,
 };
 
-export default function PinterestOutput({ pinterest, images }: PinterestOutputProps) {
+export default function PinterestOutput({ pinterest }: PinterestOutputProps) {
+  const images = pinterest.pinImages;
   return (
     <div>
       {/* ━━━ Generated Pin Images ━━━ */}
