@@ -163,20 +163,46 @@ export default function FoodSeoWriter() {
     setTestImageResult(null);
     try {
       const { generateImageAction } = await import("@/app/actions/food-seo-writer/generate-v2");
-      const keyStr = provider.useSharedKey && provider.contentProvider === provider.imageProvider ? provider.contentApiKey : provider.imageApiKey;
+
+      // Step 1: Resolve the effective API key — use content key when shared
+      const effectiveImageApiKey = provider.useSharedKey && provider.imageProvider === provider.contentProvider
+        ? provider.contentApiKey
+        : provider.imageApiKey;
+
+      if (!effectiveImageApiKey) {
+        console.error("Image test error: No API key available for image provider", provider.imageProvider);
+        setTestImageResult("error");
+        setTestingImage(false);
+        return;
+      }
+
+      // Patch the config so the server action always sees a real key
+      const testConfig = {
+        ...provider,
+        imageApiKey: effectiveImageApiKey,
+        contentApiKey: effectiveImageApiKey,
+      };
+
       const res = await generateImageAction(
         "Test Image Cookie", 
         "A beautiful test image of a fresh chocolate chip cookie on a wooden table, professional food photography", 
-        "Create a stunning high-quality photo of {content}.", // promptTemplate
+        "Create a stunning high-quality photo of {content}.",
         "Food & Kitchen" as any, 
         "", 
         "Square 1:1" as any, 
-        provider, // config
-        inputs.imageSettings.imgbbApiKey // imgbbKey
+        testConfig,
+        inputs.imageSettings.imgbbApiKey
       );
-      if (res.success) setTestImageResult("success");
-      else setTestImageResult("error");
-    } catch {
+      if (res.success) {
+        setTestImageResult("success");
+      } else {
+        console.error("Image test error:", res.error);
+        setTestImageResult("error");
+      }
+    } catch (error: unknown) {
+      const err = error as Record<string, unknown> | null;
+      const msg = (err?.message as string) || (err?.error as Record<string, unknown>)?.message as string || JSON.stringify(error) || "Unknown error";
+      console.error("Image test error:", error);
       setTestImageResult("error");
     } finally {
       setTestingImage(false);
