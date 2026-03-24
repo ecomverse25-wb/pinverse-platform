@@ -99,7 +99,7 @@ export default function FoodSeoWriter() {
   // Extra States for Multi-Provider
   const [savedKeys, setSavedKeys] = useState<Record<string, boolean>>({});
   const [testingImage, setTestingImage] = useState(false);
-  const [testImageResult, setTestImageResult] = useState<"success" | "error" | null>(null);
+  const [testImageResult, setTestImageResult] = useState<string | null>(null);
 
   // Load settings from localStorage
   useEffect(() => {
@@ -162,48 +162,34 @@ export default function FoodSeoWriter() {
     setTestingImage(true);
     setTestImageResult(null);
     try {
-      const { generateImageAction } = await import("@/app/actions/food-seo-writer/generate-v2");
+      const { testImageApiKey } = await import("@/app/actions/food-seo-writer/generate-v2");
 
-      // Step 1: Resolve the effective API key — use content key when shared
+      // Resolve the effective API key — use content key when shared
       const effectiveImageApiKey = provider.useSharedKey && provider.imageProvider === provider.contentProvider
         ? provider.contentApiKey
         : provider.imageApiKey;
 
       if (!effectiveImageApiKey) {
-        console.error("Image test error: No API key available for image provider", provider.imageProvider);
-        setTestImageResult("error");
+        setTestImageResult("error:No API key available for " + provider.imageProvider);
         setTestingImage(false);
         return;
       }
 
-      // Patch the config so the server action always sees a real key
-      const testConfig = {
-        ...provider,
-        imageApiKey: effectiveImageApiKey,
-        contentApiKey: effectiveImageApiKey,
-      };
-
-      const res = await generateImageAction(
-        "Test Image Cookie", 
-        "A beautiful test image of a fresh chocolate chip cookie on a wooden table, professional food photography", 
-        "Create a stunning high-quality photo of {content}.",
-        "Food & Kitchen" as any, 
-        "", 
-        "Square 1:1" as any, 
-        testConfig,
-        inputs.imageSettings.imgbbApiKey
+      const res = await testImageApiKey(
+        effectiveImageApiKey,
+        provider.imageProvider,
+        provider.imageModel
       );
       if (res.success) {
         setTestImageResult("success");
       } else {
         console.error("Image test error:", res.error);
-        setTestImageResult("error");
+        setTestImageResult("error:" + (res.error || "Unknown error"));
       }
     } catch (error: unknown) {
-      const err = error as Record<string, unknown> | null;
-      const msg = (err?.message as string) || (err?.error as Record<string, unknown>)?.message as string || JSON.stringify(error) || "Unknown error";
       console.error("Image test error:", error);
-      setTestImageResult("error");
+      const msg = error instanceof Error ? error.message : JSON.stringify(error) || "Unknown error";
+      setTestImageResult("error:" + msg);
     } finally {
       setTestingImage(false);
     }
@@ -494,7 +480,7 @@ export default function FoodSeoWriter() {
                   {testingImage ? "Testing..." : "🎨 Test"}
                 </button>
                 {testImageResult === "success" && <span style={{ color: "#4ade80", fontSize: 13, fontWeight: 600 }}>✅ Working!</span>}
-                {testImageResult === "error" && <span style={{ color: "#ef4444", fontSize: 13, fontWeight: 600 }}>❌ Error testing API key</span>}
+                {testImageResult && testImageResult.startsWith("error") && <span style={{ color: "#ef4444", fontSize: 13, fontWeight: 600 }}>❌ {testImageResult.replace("error:", "") || "Error testing API key"}</span>}
               </div>
             </div>
           </div>

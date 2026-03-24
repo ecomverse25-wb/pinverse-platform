@@ -722,3 +722,43 @@ export async function publishToWordPressAction(
   if (!(await checkRateLimit())) return { success: false, error: "Rate limit exceeded." };
   return publishToWordPress(options);
 }
+
+// ─── Lightweight Image API Key Test ───
+
+export async function testImageApiKey(
+  apiKey: string,
+  imageProvider: string,
+  imageModel: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!apiKey) return { success: false, error: "No API key provided." };
+
+  try {
+    if (imageProvider === "gemini") {
+      // Test by listing models — this validates the key without generating an image
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+        { method: "GET" }
+      );
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const msg = data?.error?.message || `HTTP ${response.status}`;
+        return { success: false, error: `Gemini API key invalid: ${msg}` };
+      }
+      return { success: true };
+    } else if (imageProvider === "replicate") {
+      // Test by checking the model exists
+      const response = await fetch(`https://api.replicate.com/v1/models/${imageModel}`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (!response.ok) {
+        return { success: false, error: `Replicate API key invalid or model not found (HTTP ${response.status})` };
+      }
+      return { success: true };
+    }
+    return { success: false, error: `Unknown image provider: ${imageProvider}` };
+  } catch (err: unknown) {
+    console.error("testImageApiKey error:", err);
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    return { success: false, error: msg };
+  }
+}
