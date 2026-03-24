@@ -364,10 +364,11 @@ ${ftcSection}
 OUTLINE TO FOLLOW:
 ${research.outline.map((h: OutlineHeading) => `${h.level.toUpperCase()}: ${h.text} (~${h.plannedWordCount} words)`).join("\n")}
 
-IMAGE PLACEHOLDERS:
-After each H2 heading, insert an image placeholder using this EXACT HTML format:
-<figure><img src="image-placeholder" alt="[descriptive alt text with keyword variation]" data-pin-description="[1-sentence pinterest description]" /></figure>
-Include at least 5 image placeholders throughout the article. Each alt text must be unique and descriptive.
+IMAGE PLACEMENT (MANDATORY): 
+For each recipe/content H2 section, place the <figure><img src='image-placeholder' alt='...' data-pin-description='...' /></figure> tag AFTER the second paragraph and BEFORE the Practical tip paragraph. NEVER place the image immediately after the H2 heading as the first element.
+
+NO IMAGE RULE (MANDATORY): 
+Do NOT place any <figure><img> placeholder inside the FAQ section, inside any FAQ question/answer pair, or inside the closing call-to-action section. Images appear ONLY in recipe/content H2 sections.
 
 KEYWORD DISTRIBUTION:
 - Main keyword "${keyword}" in H1, first paragraph, and max 2 H2 headings
@@ -392,6 +393,18 @@ Do NOT wrap in code fences. Do NOT include <html>, <head>, or <body> tags.`;
 
     // Remove duplicate <h1> title
     content = content.replace(/^\s*<h1[^>]*>.*?<\/h1>\s*/i, "");
+
+    // Fix 1: Add Featured Image placeholder as the very FIRST element before intro
+    const heroPlaceholder = `\n<figure class="wp-block-image size-full featured-image">\n  <img src="image-placeholder" alt="${inputs.core.mainKeyword} — ${research.title}" data-pin-description="${research.metaDescription}" />\n</figure>\n\n`;
+    content = heroPlaceholder + content;
+
+    // Fix 3: NO images in FAQ or Closing CTA. Post-processing strip of <figure> tags in those sections.
+    content = content.replace(
+      /(<h2[^>]*>.*?(?:frequently asked|faq|save these|for later|share this).*?<\/h2>)([\s\S]*?)(?=<h2|$)/gi,
+      (match, h2, sectionContent) => {
+        return h2 + sectionContent.replace(/<figure[^>]*>.*?<\/figure>/gi, "");
+      }
+    );
 
     // Strip out any fabricated internal links that point to relative paths 
     // AND weren't in the provided internal links list (since we only pass generic instructions for now, 
@@ -681,9 +694,16 @@ export async function generateImageAction(
   colorMood: string,
   dimensions: any,
   config: ProviderSettings,
-  imgbbKey: string
+  imgbbKey: string,
+  imageType: 'featured' | 'inline' | 'pin' = 'inline'
 ): Promise<{ success?: boolean; imageUrl?: string; prompt?: string; error?: string }> {
   if (!(await checkRateLimit())) return { success: false, error: "Rate limit exceeded." };
+
+  const IMAGE_SPECS = {
+    featured: { aspectRatio: '16:9', imageSize: '1K' },
+    inline:   { aspectRatio: '9:16', imageSize: '1K' },
+    pin:      { aspectRatio: '2:3',  imageSize: '1K' },
+  };
 
   const prompt = promptTemplate
     .replace("{title}", title)
@@ -695,7 +715,6 @@ export async function generateImageAction(
     let imageUrl = "";
     if (config.imageProvider === "gemini") {
       const gApiKey = apiKey || process.env.GEMINI_API_KEY || "";
-      // Correct REST call per official Gemini image generation docs
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${config.imageModel}:generateContent?key=${gApiKey}`,
         {
@@ -706,7 +725,11 @@ export async function generateImageAction(
               parts: [{ text: prompt }]
             }],
             generationConfig: {
-              responseModalities: ["TEXT", "IMAGE"]
+              responseModalities: ["TEXT", "IMAGE"],
+              imageConfig: {
+                aspectRatio: IMAGE_SPECS[imageType].aspectRatio,
+                imageSize: IMAGE_SPECS[imageType].imageSize,
+              }
             }
           }),
         }

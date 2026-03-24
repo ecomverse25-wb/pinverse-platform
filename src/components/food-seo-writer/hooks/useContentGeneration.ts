@@ -228,7 +228,8 @@ export function useContentGeneration() {
                   inputs.imageSettings.colorMood,
                   "Pinterest Portrait 2:3",
                   provider as any,
-                  inputs.imageSettings.imgbbApiKey
+                  inputs.imageSettings.imgbbApiKey,
+                  'pin'
                 );
                 
                 if (result.success && result.imageUrl) {

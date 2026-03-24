@@ -85,7 +85,8 @@ export function useImageGeneration() {
           inputs.imageSettings.colorMood,
           isFeatured ? inputs.imageSettings.dimensions : "Pinterest Portrait 2:3", // Standardize body images
           provider as any,
-          inputs.imageSettings.imgbbApiKey
+          inputs.imageSettings.imgbbApiKey,
+          isFeatured ? 'featured' : 'inline'
         );
 
         if (result.success && result.imageUrl) {
