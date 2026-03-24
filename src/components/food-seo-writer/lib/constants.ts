@@ -246,11 +246,10 @@ export const PINTEREST_IMAGE_RATIO = "2:3";
 
 export const CONTENT_MODELS: Record<ContentProvider, { value: string; label: string; description: string }[]> = {
   gemini: [
-    { value: "gemini-3.1-pro", label: "Gemini 3.1 Pro", description: "Most advanced. #1 on benchmarks. Released Feb 19, 2026." },
-    { value: "gemini-3", label: "Gemini 3", description: "Previous flagship with multimodal understanding." },
-    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", description: "Deep reasoning and coding. Excellent for complex tasks." },
+    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", description: "Most capable. Deep reasoning and coding. Excellent for complex tasks." },
     { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", description: "Best price-performance, fast with reasoning." },
     { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite", description: "Fastest and most budget-friendly." },
+    { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash", description: "Multimodal, cost-effective general purpose." },
   ],
   openai: [
     { value: "gpt-5.4", label: "GPT-5.4", description: "Frontier model. 1M context, computer use, tool search. Released Mar 5, 2026." },
@@ -282,10 +281,9 @@ export const CONTENT_MODELS: Record<ContentProvider, { value: string; label: str
 
 export const IMAGE_MODELS: Record<ImageProvider, { value: string; label: string; description: string }[]> = {
   gemini: [
-    { value: "nano-banana", label: "Nano Banana", description: "Fast, creative image generation." },
-    { value: "nano-banana-pro-preview", label: "Nano Banana Pro \uD83C\uDF4C 4K Studio Quality", description: "Professional 4K studio quality." },
-    { value: "nano-banana-2-preview", label: "Nano Banana 2 Preview", description: "Production-scale. Gemini 3 intelligence." },
-    { value: "imagen-4", label: "Imagen 4", description: "Exceptional clarity up to 2K resolution." },
+    { value: "imagen-4-fast", label: "Imagen 4 Fast", description: "Speed-optimized image generation." },
+    { value: "imagen-4-standard", label: "Imagen 4 Standard", description: "Balanced quality image generation." },
+    { value: "gemini-3-pro-image-preview", label: "Gemini 3 Pro Image", description: "High-fidelity with reasoning-enhanced composition." },
   ],
   replicate: [
     { value: "ideogram-ai/ideogram-v2-turbo", label: "Ideogram", description: "Excellent text rendering in images." },

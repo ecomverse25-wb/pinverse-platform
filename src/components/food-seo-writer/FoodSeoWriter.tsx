@@ -19,7 +19,7 @@ const DEFAULT_PROVIDER: ProviderSettings = {
   contentModel: "gemini-2.5-flash",
   contentApiKey: "",
   imageProvider: "gemini",
-  imageModel: "nano-banana-pro-preview",
+  imageModel: "imagen-4-fast",
   imageApiKey: "",
   useSharedKey: true,
 };

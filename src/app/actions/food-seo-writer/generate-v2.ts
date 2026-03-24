@@ -194,9 +194,10 @@ CRITICAL OUTLINE RULES:
     };
 
     return { success: true, result };
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("[FOOD-SEO-V2] Research stage failed:", err);
-    return { success: false, error: "Research & Planning stage failed. Please try again." };
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    return { success: false, error: `Research & Planning failed: ${msg}` };
   }
 }
 
