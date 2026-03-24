@@ -104,7 +104,7 @@ export default function OutputTabs({ result, keyword, onFixIssues, fixing }: Out
           />
         )}
         {activeTab === "pinterest" && (
-          <PinterestOutput pinterest={result.pinterest} />
+          <PinterestOutput pinterest={result.pinterest} images={result.generatedImages} />
         )}
         {activeTab === "seo" && (
           <SeoChecklist seo={result.seo} keyword={keyword} />

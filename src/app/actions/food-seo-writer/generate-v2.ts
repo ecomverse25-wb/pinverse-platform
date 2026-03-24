@@ -372,7 +372,7 @@ KEYWORD DISTRIBUTION:
 
 OUTPUT FORMAT:
 Return clean HTML with:
-- <h1> for title
+- Do NOT include an <h1> tag (the title is handled separately)
 - <h2> for main sections
 - <h3> for sub-sections and FAQ questions
 - <p> for paragraphs
@@ -384,6 +384,9 @@ Do NOT wrap in code fences. Do NOT include <html>, <head>, or <body> tags.`;
   try {
     const text = await generateTextWithProvider(prompt, config, SYSTEM_PROMPT_CONTENT_WRITER);
     let content = text.replace(/```html\s*/gi, "").replace(/```/g, "").trim();
+
+    // Remove duplicate <h1> title
+    content = content.replace(/<h1[^>]*>.*?<\/h1>\s*/gi, "");
 
     // Bug Fix 7: Strip any FTC disclosure text that the AI may have included in the body
     content = content.replace(

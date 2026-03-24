@@ -29,6 +29,7 @@ function CopyBtn({ text }: { text: string }) {
 
 interface PinterestOutputProps {
   pinterest: PinterestCopyResult;
+  images?: { hostedUrl: string; altText: string }[];
 }
 
 const sectionTitle: React.CSSProperties = {
@@ -47,9 +48,38 @@ const itemCard: React.CSSProperties = {
   marginBottom: 8,
 };
 
-export default function PinterestOutput({ pinterest }: PinterestOutputProps) {
+export default function PinterestOutput({ pinterest, images }: PinterestOutputProps) {
   return (
     <div>
+      {/* ━━━ Generated Pin Images ━━━ */}
+      {images && images.length > 0 && (
+        <div style={{ marginBottom: 32 }}>
+          <div style={sectionTitle}>📸 Generated Pin Images</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 16 }}>
+            {images.map((img, i) => (
+              <div key={i} style={{ ...itemCard, padding: 8, textAlign: "center" }}>
+                <img 
+                  src={img.hostedUrl} 
+                  alt={img.altText} 
+                  style={{ width: "100%", height: "auto", borderRadius: 4, aspectRatio: "2/3", objectFit: "cover", border: "1px solid #334155" }} 
+                />
+                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {img.altText}
+                </div>
+                <a 
+                  href={img.hostedUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{ display: "inline-block", marginTop: 8, fontSize: 12, color: "#38bdf8", textDecoration: "none" }}
+                >
+                  View Full Size
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ━━━ Pin Titles ━━━ */}
       <div style={sectionTitle}>📌 Pin Title Variants</div>
       {pinterest.pinTitles.map((t, i) => (

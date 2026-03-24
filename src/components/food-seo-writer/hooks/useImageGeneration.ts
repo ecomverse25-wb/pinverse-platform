@@ -36,16 +36,29 @@ export function useImageGeneration() {
     const newImages: GeneratedImage[] = [];
 
     try {
-      // Find all markdown image placeholders: ![alt text](image-placeholder)
-      const imageRegex = /!\[([^\]]+)\]\(image-placeholder\)/g;
+      // 1. Find all markdown image placeholders: ![alt text](placeholder-url)
+      const mdRegex = /!\[([^\]]+)\]\(([^)]*)\)/g;
       let match;
       const placeholders: { altText: string; original: string }[] = [];
 
-      while ((match = imageRegex.exec(articleHtml)) !== null) {
-        placeholders.push({
-          altText: match[1],
-          original: match[0]
-        });
+      while ((match = mdRegex.exec(articleHtml)) !== null) {
+        if (!match[2].startsWith("http")) {
+          placeholders.push({ altText: match[1], original: match[0] });
+        }
+      }
+
+      // 2. Find all HTML image placeholders: <img src="placeholder-url" alt="alt text">
+      const htmlRegex = /<img[^>]+>/gi;
+      while ((match = htmlRegex.exec(articleHtml)) !== null) {
+        const imgTag = match[0];
+        const srcMatch = imgTag.match(/src=["']([^"']*)["']/i);
+        const altMatch = imgTag.match(/alt=["']([^"']*)["']/i);
+        const src = srcMatch ? srcMatch[1] : "";
+        const alt = altMatch ? altMatch[1] : `Featured image for ${title}`;
+        
+        if (!src.startsWith("http")) {
+          placeholders.push({ altText: alt, original: imgTag });
+        }
       }
 
       if (placeholders.length === 0) {
