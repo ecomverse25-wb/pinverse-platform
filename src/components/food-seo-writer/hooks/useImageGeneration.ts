@@ -40,11 +40,11 @@ export function useImageGeneration() {
       // 1. Find all markdown image placeholders: ![alt text](placeholder-url)
       const mdRegex = /!\[([^\]]+)\]\(([^)]*)\)/g;
       let match;
-      const placeholders: { altText: string; original: string }[] = [];
+      const placeholders: { altText: string; original: string; isHtml: boolean }[] = [];
 
       while ((match = mdRegex.exec(articleHtml)) !== null) {
         if (!match[2].startsWith("http")) {
-          placeholders.push({ altText: match[1], original: match[0] });
+          placeholders.push({ altText: match[1], original: match[0], isHtml: false });
         }
       }
 
@@ -58,7 +58,7 @@ export function useImageGeneration() {
         const alt = altMatch ? altMatch[1] : `Featured image for ${title}`;
         
         if (!src.startsWith("http")) {
-          placeholders.push({ altText: alt, original: imgTag });
+          placeholders.push({ altText: alt, original: imgTag, isHtml: true });
         }
       }
 
@@ -77,33 +77,55 @@ export function useImageGeneration() {
         const promptTemplate = inputs.imageSettings.promptInstructions;
         const contentSummary = `Image Subject: ${ph.altText}`;
 
-        const result = await generateImageAction(
-          title,
-          contentSummary,
-          promptTemplate,
-          inputs.imageSettings.style,
-          inputs.imageSettings.colorMood,
-          isFeatured ? inputs.imageSettings.dimensions : "Pinterest Portrait 2:3", // Standardize body images
-          provider as any,
-          inputs.imageSettings.imgbbApiKey,
-          isFeatured ? 'featured' : 'inline'
-        );
+        let finalImageUrl: string | null = null;
+        let lastError = "";
+        const maxRetries = 3;
 
-        if (result.success && result.imageUrl) {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const result = await generateImageAction(
+              title,
+              contentSummary,
+              promptTemplate,
+              inputs.imageSettings.style,
+              inputs.imageSettings.colorMood,
+              isFeatured ? inputs.imageSettings.dimensions : "Pinterest Portrait 2:3", // Standardize body images
+              provider as any,
+              inputs.imageSettings.imgbbApiKey,
+              isFeatured ? 'featured' : 'inline'
+            );
+
+            if (result.success && result.imageUrl) {
+              finalImageUrl = result.imageUrl;
+              break;
+            } else {
+              lastError = result.error || "Unknown error";
+              if (onLog) onLog(`[Image] Attempt ${attempt}/${maxRetries} returned no image, retrying...`);
+            }
+          } catch (err: any) {
+            lastError = err.message || "Failed";
+            if (onLog) onLog(`[Image] Attempt ${attempt}/${maxRetries} failed: ${lastError}`);
+          }
+          if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000));
+        }
+
+        if (finalImageUrl) {
           // Correction 3: Add data-pin-description attribute combining alt text and keyword
-          const pinDesc = `${ph.altText} - ${inputs.core.mainKeyword}`;
-          const replacementHtml = `\n<figure class="wp-block-image size-large">\n  <img src="${result.imageUrl}" alt="${ph.altText}" data-pin-description="${pinDesc}" />\n</figure>\n`;
+          const pinDesc = `${ph.altText} - ${inputs.core.mainKeyword}`.replace(/"/g, "&quot;");
+          const replacementHtml = ph.isHtml
+            ? `<img src="${finalImageUrl}" alt="${ph.altText.replace(/"/g, "&quot;")}" data-pin-description="${pinDesc}" />`
+            : `\n<figure class="wp-block-image size-large">\n  <img src="${finalImageUrl}" alt="${ph.altText.replace(/"/g, "&quot;")}" data-pin-description="${pinDesc}" />\n</figure>\n`;
           
           updatedHtml = updatedHtml.replace(ph.original, replacementHtml);
 
           newImages.push({
             sectionHeading: `Image ${i + 1}`,
             altText: ph.altText,
-            hostedUrl: result.imageUrl,
+            hostedUrl: finalImageUrl,
             isFeatured,
           });
         } else {
-          const warnMsg = `[Image Warning] Image generation failed: ${result.error || "Unknown error"} — continuing without image`;
+          const warnMsg = `[Image Warning] All ${maxRetries} attempts failed (${lastError}) — continuing without image`;
           console.error(warnMsg);
           if (onLog) onLog(warnMsg);
           

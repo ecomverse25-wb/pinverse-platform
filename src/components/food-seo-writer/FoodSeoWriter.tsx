@@ -557,6 +557,8 @@ export default function FoodSeoWriter() {
             keyword={inputs.core.mainKeyword}
             onFixIssues={handleFixIssues}
             fixing={fixing}
+            inputs={inputs}
+            provider={provider}
           />
 
           <ExportButtons result={result} keyword={inputs.core.mainKeyword} inputs={inputs} />

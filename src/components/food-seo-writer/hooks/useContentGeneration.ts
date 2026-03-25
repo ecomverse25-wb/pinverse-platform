@@ -218,34 +218,55 @@ export function useContentGeneration() {
 
             // FIX 3: Pinterest Pin Image Generation
             if (inputs.imageSettings.enabled) {
-              const numVariants = Math.min(3, pinResult.result.pinTitles.length);
+              const numVariants = pinResult.result.pinTitles.length;
               addLog(`Generating ${numVariants} Pinterest pin 1000x1500 images...`);
               
               const pinImages: GeneratedImage[] = [];
               for (let i = 0; i < numVariants; i++) {
                 const pinTitle = pinResult.result.pinTitles[i].text;
                 const promptTemplate = inputs.imageSettings.promptInstructions;
+                const pinPrompt = `Pinterest pin image for: "${pinTitle}". Food photography style. Vertical portrait format. Include the text "${pinTitle}" as a bold overlay at the bottom of the image with a dark semi-transparent background strip.`;
                 
-                const result = await generateImageAction(
-                  pinTitle,
-                  `Pinterest pin image for: ${pinTitle}. Food photography style. 1000x1500 vertical format. High contrast text overlay area at bottom.`,
-                  promptTemplate,
-                  inputs.imageSettings.style,
-                  inputs.imageSettings.colorMood,
-                  "Pinterest Portrait 2:3",
-                  provider as any,
-                  inputs.imageSettings.imgbbApiKey,
-                  'pin'
-                );
+                let finalImageUrl: string | null = null;
+                let lastError = "";
+                const maxRetries = 3;
+
+                for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                  try {
+                    const result = await generateImageAction(
+                      pinTitle,
+                      pinPrompt,
+                      promptTemplate,
+                      inputs.imageSettings.style,
+                      inputs.imageSettings.colorMood,
+                      "Pinterest Portrait 2:3",
+                      provider as any,
+                      inputs.imageSettings.imgbbApiKey,
+                      'pin'
+                    );
+
+                    if (result.success && result.imageUrl) {
+                      finalImageUrl = result.imageUrl;
+                      break;
+                    } else {
+                      lastError = result.error || "Unknown error";
+                      addLog(`[Image Warning] Pin Attempt ${attempt}/${maxRetries} returned no image, retrying...`);
+                    }
+                  } catch (err: any) {
+                    lastError = err.message || "Failed";
+                    addLog(`[Image Warning] Pin Attempt ${attempt}/${maxRetries} failed: ${lastError}`);
+                  }
+                  if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000));
+                }
                 
-                if (result.success && result.imageUrl) {
+                if (finalImageUrl) {
                   pinImages.push({
                     sectionHeading: `Pin Variant ${i + 1}`,
                     altText: pinTitle,
-                    hostedUrl: result.imageUrl
+                    hostedUrl: finalImageUrl
                   });
                 } else {
-                  const warnMsg = `[Image Warning] Pin image generation failed: ${result.error || "Unknown error"} — continuing without image`;
+                  const warnMsg = `[Image Warning] All ${maxRetries} pin attempts failed (${lastError}) — continuing without image`;
                   console.error(warnMsg);
                   addLog(warnMsg);
                 }
