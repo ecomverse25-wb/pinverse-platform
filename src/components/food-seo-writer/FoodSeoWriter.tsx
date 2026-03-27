@@ -101,6 +101,14 @@ export default function FoodSeoWriter() {
   const [testingImage, setTestingImage] = useState(false);
   const [testImageResult, setTestImageResult] = useState<string | null>(null);
 
+  // --- Toast State ---
+  const [toast, setToast] = useState<{ message: string; type: "error" | "success" } | null>(null);
+
+  const showToast = useCallback((message: string, type: "error" | "success" = "error") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 5000);
+  }, []);
+
   // Load settings from localStorage
   useEffect(() => {
     try {
@@ -209,15 +217,31 @@ export default function FoodSeoWriter() {
   // Generate handler
   const handleGenerate = useCallback(() => {
     // Validate keyword
-    const words = inputs.core.mainKeyword.trim().split(/\s+/).filter(Boolean);
-    if (words.length < 2 || words.length > 8) {
-      setKeywordError("Keyword should be 2-8 words.");
+    if (inputs.batch.mode === "batch") {
+      const validKws = inputs.batch.keywords.filter(k => k.trim());
+      if (validKws.length === 0) {
+        setKeywordError("Please enter at least one keyword for batch mode.");
+        showToast("Please enter at least one keyword for batch mode.", "error");
+        return;
+      }
+    } else {
+      const words = inputs.core.mainKeyword.trim().split(/\s+/).filter(Boolean);
+      if (words.length < 2 || words.length > 8) {
+        setKeywordError("Keyword should be 2-8 words.");
+        showToast("Keyword should be 2-8 words.", "error");
+        return;
+      }
+    }
+
+    if (!inputs.core.contentType) {
+      showToast("Please select a content type.", "error");
       return;
     }
 
     // Validate API key
     if (!provider.contentApiKey) {
       setKeywordError(`Please enter your ${provider.contentProvider.toUpperCase()} API key below.`);
+      showToast(`Please enter your ${provider.contentProvider.toUpperCase()} API key.`, "error");
       return;
     }
 
@@ -227,7 +251,7 @@ export default function FoodSeoWriter() {
     } else {
       generate(inputs, provider);
     }
-  }, [inputs, provider, generate, startBatch]);
+  }, [inputs, provider, generate, startBatch, showToast]);
 
   // Fix issues handler
   const handleFixIssues = useCallback(() => {
@@ -564,6 +588,40 @@ export default function FoodSeoWriter() {
           <ExportButtons result={result} keyword={inputs.core.mainKeyword} inputs={inputs} />
         </>
       )}
+
+      {/* ━━━ Toast Notification ━━━ */}
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            right: 24,
+            padding: "16px 24px",
+            background: toast.type === "error" ? "#7f1d1d" : "#065f46",
+            color: toast.type === "error" ? "#fca5a5" : "#6ee7b7",
+            border: `1px solid ${toast.type === "error" ? "#991b1b" : "#059669"}`,
+            borderRadius: 8,
+            boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.5)",
+            zIndex: 9999,
+            fontSize: 14,
+            fontWeight: 600,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            animation: "slideIn 0.3s ease-out forwards",
+          }}
+        >
+          {toast.type === "error" ? "❌" : "✅"} {toast.message}
+        </div>
+      )}
+      
+      {/* CSS animation for Toast */}
+      <style>{`
+        @keyframes slideIn {
+          from { transform: translateY(100%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }

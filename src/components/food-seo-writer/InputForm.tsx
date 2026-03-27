@@ -251,10 +251,11 @@ export default function InputForm({
 
   // Validate keyword
   const keywordWords = inputs.core.mainKeyword.trim().split(/\s+/).filter(Boolean).length;
-  const kwValid =
-    inputs.core.mainKeyword.trim().length > 0 &&
-    keywordWords >= KEYWORD_MIN_WORDS &&
-    keywordWords <= KEYWORD_MAX_WORDS;
+  const kwValid = inputs.batch.mode === "batch" 
+    ? inputs.batch.keywords.filter(k => k.trim()).length > 0
+    : (inputs.core.mainKeyword.trim().length > 0 &&
+       keywordWords >= KEYWORD_MIN_WORDS &&
+       keywordWords <= KEYWORD_MAX_WORDS);
 
   const canGenerate = kwValid && inputs.core.contentType && !generating;
 
@@ -917,19 +918,17 @@ export default function InputForm({
       {/* ━━━ Generate Button ━━━ */}
       <button
         onClick={onGenerate}
-        disabled={!canGenerate}
+        disabled={generating}
         style={{
           width: "100%",
           padding: "14px 24px",
-          background: canGenerate
-            ? "linear-gradient(135deg, #10b981, #059669)"
-            : "#334155",
+          background: "linear-gradient(135deg, #10b981, #059669)",
           border: "none",
           borderRadius: 12,
           color: "white",
           fontSize: 16,
           fontWeight: 700,
-          cursor: canGenerate ? "pointer" : "not-allowed",
+          cursor: generating ? "wait" : "pointer",
           transition: "all 0.2s",
           opacity: generating ? 0.7 : 1,
         }}
