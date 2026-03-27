@@ -268,6 +268,7 @@ export default function FoodSeoWriter() {
 
   const showResults = inputs.batch.mode === "single" && result !== null;
   const isBatchActive = batchItems.length > 0;
+  const batchHasCompletedItems = batchItems.some(i => i.status === "completed");
   const showProgress = generating || progress.currentStage !== "input";
   const hideForm = showResults || isBatchActive || generating;
 
@@ -550,6 +551,7 @@ export default function FoodSeoWriter() {
           onStop={stopBatch}
           onResume={resumeBatch}
           onClear={clearBatch}
+          currentProgress={isBatchProcessing ? progress : undefined}
         />
       )}
 
@@ -591,6 +593,56 @@ export default function FoodSeoWriter() {
 
           <ExportButtons result={result} keyword={inputs.core.mainKeyword} inputs={inputs} />
         </>
+      )}
+
+      {/* ━━━ Batch Results (Batch Mode) ━━━ */}
+      {isBatchActive && batchHasCompletedItems && !isBatchProcessing && (
+        <div style={{ marginTop: 24 }}>
+          <h3 style={{ color: "#f8fafc", fontSize: 16, marginBottom: 16 }}>📋 Batch Results</h3>
+          {batchItems
+            .filter(item => item.status === "completed" && item.result)
+            .map((item, idx) => (
+              <details
+                key={idx}
+                style={{
+                  background: "#1a2035",
+                  border: "1px solid #334155",
+                  borderRadius: 8,
+                  marginBottom: 8,
+                  overflow: "hidden",
+                }}
+              >
+                <summary
+                  style={{
+                    padding: "12px 16px",
+                    cursor: "pointer",
+                    color: "#f8fafc",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <span>✅ {item.keyword}</span>
+                  <span style={{ color: "#4ade80", fontSize: 12, fontWeight: 500 }}>
+                    {item.result!.quality.totalScore}/100 · {item.result!.content.wordCount} words
+                  </span>
+                </summary>
+                <div style={{ padding: "0 16px 16px" }}>
+                  <OutputTabs
+                    result={item.result!}
+                    keyword={item.keyword}
+                    onFixIssues={() => {}}
+                    fixing={false}
+                    inputs={{ ...inputs, core: { ...inputs.core, mainKeyword: item.keyword } }}
+                    provider={provider}
+                  />
+                  <ExportButtons result={item.result!} keyword={item.keyword} inputs={inputs} />
+                </div>
+              </details>
+            ))}
+        </div>
       )}
 
       {/* ━━━ Toast Notification ━━━ */}

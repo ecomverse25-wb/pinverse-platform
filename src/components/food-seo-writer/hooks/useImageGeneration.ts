@@ -67,18 +67,13 @@ export function useImageGeneration() {
         return { success: true, updatedHtml, generatedImages: [] };
       }
 
-      // Generate the first one as featured image (higher quality/dimensions)
-      // For now, we'll generate all placeholders sequentially to avoid rate limits
-      for (let i = 0; i < placeholders.length; i++) {
-        const ph = placeholders[i];
-        const isFeatured = i === 0;
+      // Generate images in parallel batches of 3 (quality preserved — same retries per image)
+      const IMG_BATCH_SIZE = 3;
 
-        // Simplify prompt for each image using the alt text
+      const generateSingleImage = async (ph: typeof placeholders[0], idx: number) => {
+        const isFeatured = idx === 0;
         const promptTemplate = inputs.imageSettings.promptInstructions;
         const contentSummary = `Image Subject: ${ph.altText}`;
-
-        let finalImageUrl: string | null = null;
-        let lastError = "";
         const maxRetries = 3;
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -89,49 +84,58 @@ export function useImageGeneration() {
               promptTemplate,
               inputs.imageSettings.style,
               inputs.imageSettings.colorMood,
-              isFeatured ? inputs.imageSettings.dimensions : "Pinterest Portrait 2:3", // Standardize body images
+              isFeatured ? inputs.imageSettings.dimensions : "Pinterest Portrait 2:3",
               provider as any,
               inputs.imageSettings.imgbbApiKey,
               isFeatured ? 'featured' : 'inline'
             );
 
             if (result.success && result.imageUrl) {
-              finalImageUrl = result.imageUrl;
-              break;
-            } else {
-              lastError = result.error || "Unknown error";
-              if (onLog) onLog(`[Image] Attempt ${attempt}/${maxRetries} returned no image, retrying...`);
+              return { success: true as const, imageUrl: result.imageUrl, idx, ph, isFeatured };
             }
+            if (onLog) onLog(`[Image] Image ${idx + 1} attempt ${attempt}/${maxRetries} — no image, retrying...`);
           } catch (err: any) {
-            lastError = err.message || "Failed";
-            if (onLog) onLog(`[Image] Attempt ${attempt}/${maxRetries} failed: ${lastError}`);
+            if (onLog) onLog(`[Image] Image ${idx + 1} attempt ${attempt}/${maxRetries} failed: ${err.message || "Failed"}`);
           }
           if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000));
         }
+        return { success: false as const, idx, ph, isFeatured };
+      };
 
-        if (finalImageUrl) {
-          // Correction 3: Add data-pin-description attribute combining alt text and keyword
-          const pinDesc = `${ph.altText} - ${inputs.core.mainKeyword}`.replace(/"/g, "&quot;");
-          const replacementHtml = ph.isHtml
-            ? `<img src="${finalImageUrl}" alt="${ph.altText.replace(/"/g, "&quot;")}" data-pin-description="${pinDesc}" />`
-            : `\n<figure class="wp-block-image size-large">\n  <img src="${finalImageUrl}" alt="${ph.altText.replace(/"/g, "&quot;")}" data-pin-description="${pinDesc}" />\n</figure>\n`;
-          
-          updatedHtml = updatedHtml.replace(ph.original, replacementHtml);
+      if (onLog) onLog(`[Image] Processing ${placeholders.length} images in parallel batches of ${IMG_BATCH_SIZE}...`);
 
-          newImages.push({
-            sectionHeading: `Image ${i + 1}`,
-            altText: ph.altText,
-            hostedUrl: finalImageUrl,
-            isFeatured,
-          });
-        } else {
-          const warnMsg = `[Image Warning] All ${maxRetries} attempts failed (${lastError}) — continuing without image`;
-          console.error(warnMsg);
-          if (onLog) onLog(warnMsg);
-          
-          // Bug Fix 3: Replace broken image icons with styled placeholder divs
-          const fallbackHtml = `\n<div class="image-placeholder" style="background:#1e293b; border:2px dashed #475569; padding:40px; text-align:center; color:#94a3b8; border-radius:8px; margin:20px 0;">\n  <span style="font-size:24px;">🖼️</span><br/>\n  <span style="font-weight:bold; margin-top:8px; display:block;">AI image will be generated here</span>\n  <p style="font-size:12px; margin-top:4px;">${ph.altText}</p>\n</div>\n`;
-          updatedHtml = updatedHtml.replace(ph.original, fallbackHtml);
+      for (let batchStart = 0; batchStart < placeholders.length; batchStart += IMG_BATCH_SIZE) {
+        const batch = placeholders.slice(batchStart, batchStart + IMG_BATCH_SIZE);
+        if (onLog) onLog(`[Image] Batch ${Math.floor(batchStart / IMG_BATCH_SIZE) + 1}/${Math.ceil(placeholders.length / IMG_BATCH_SIZE)} (${batch.length} images)...`);
+
+        const results = await Promise.allSettled(
+          batch.map((ph, batchIdx) => generateSingleImage(ph, batchStart + batchIdx))
+        );
+
+        for (const settled of results) {
+          if (settled.status === "fulfilled") {
+            const res = settled.value;
+            if (res.success) {
+              // Correction 3: Add data-pin-description attribute combining alt text and keyword
+              const pinDesc = `${res.ph.altText} - ${inputs.core.mainKeyword}`.replace(/"/g, "&quot;");
+              const replacementHtml = res.ph.isHtml
+                ? `<img src="${res.imageUrl}" alt="${res.ph.altText.replace(/"/g, "&quot;")}" data-pin-description="${pinDesc}" />`
+                : `\n<figure class="wp-block-image size-large">\n  <img src="${res.imageUrl}" alt="${res.ph.altText.replace(/"/g, "&quot;")}" data-pin-description="${pinDesc}" />\n</figure>\n`;
+
+              updatedHtml = updatedHtml.replace(res.ph.original, replacementHtml);
+
+              newImages.push({
+                sectionHeading: `Image ${res.idx + 1}`,
+                altText: res.ph.altText,
+                hostedUrl: res.imageUrl,
+                isFeatured: res.isFeatured,
+              });
+            } else {
+              // Bug Fix 3: Replace broken image icons with styled placeholder divs
+              const fallbackHtml = `\n<div class="image-placeholder" style="background:#1e293b; border:2px dashed #475569; padding:40px; text-align:center; color:#94a3b8; border-radius:8px; margin:20px 0;">\n  <span style="font-size:24px;">🖼️</span><br/>\n  <span style="font-weight:bold; margin-top:8px; display:block;">AI image will be generated here</span>\n  <p style="font-size:12px; margin-top:4px;">${res.ph.altText}</p>\n</div>\n`;
+              updatedHtml = updatedHtml.replace(res.ph.original, fallbackHtml);
+            }
+          }
         }
       }
 

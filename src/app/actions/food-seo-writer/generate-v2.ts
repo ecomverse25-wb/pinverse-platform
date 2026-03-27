@@ -28,7 +28,7 @@ async function checkRateLimit(): Promise<boolean> {
     rateLimits.set(ip, { count: 1, resetTime: now + 60000 });
     return true;
   }
-  if (limit.count >= 15) return false;
+  if (limit.count >= 60) return false;
   limit.count++;
   return true;
 }
