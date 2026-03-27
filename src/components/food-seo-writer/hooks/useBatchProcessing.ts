@@ -18,6 +18,46 @@ export function useBatchProcessing() {
   const [sharedInputs, setSharedInputs] = useState<FormInputs | null>(null);
   const [sharedProvider, setSharedProvider] = useState<ProviderSettings | null>(null);
 
+  // --- Load from local storage on mount ---
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("food-seo-writer-batch-state");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.batchItems && parsed.batchItems.length > 0) {
+          setBatchItems(parsed.batchItems);
+          setCurrentBatchIndex(parsed.currentBatchIndex ?? 0);
+          setSharedInputs(parsed.sharedInputs);
+          setSharedProvider(parsed.sharedProvider);
+          setIsBatchProcessing(false); // Start paused
+        }
+      }
+    } catch (e) {
+      console.error("Error loading batch state from local storage", e);
+    }
+  }, []);
+
+  // --- Save to local storage on change ---
+  useEffect(() => {
+    if (batchItems.length > 0) {
+      try {
+        localStorage.setItem(
+          "food-seo-writer-batch-state",
+          JSON.stringify({
+            batchItems,
+            currentBatchIndex,
+            sharedInputs,
+            sharedProvider,
+          })
+        );
+      } catch (e) {
+        console.error("Error saving batch state", e);
+      }
+    } else {
+      localStorage.removeItem("food-seo-writer-batch-state");
+    }
+  }, [batchItems, currentBatchIndex, sharedInputs, sharedProvider]);
+
   // We instantiate a generation hook to run internally per keyword
   const {
     progress,
@@ -53,6 +93,21 @@ export function useBatchProcessing() {
     setIsBatchProcessing(false);
     abort();
   }, [abort]);
+
+  const resumeBatch = useCallback(() => {
+    if (batchItems.length > 0 && currentBatchIndex < batchItems.length) {
+      setIsBatchProcessing(true);
+    }
+  }, [batchItems, currentBatchIndex]);
+
+  const clearBatch = useCallback(() => {
+    stopBatch();
+    setBatchItems([]);
+    setCurrentBatchIndex(-1);
+    setSharedInputs(null);
+    setSharedProvider(null);
+    localStorage.removeItem("food-seo-writer-batch-state");
+  }, [stopBatch]);
 
   // The effect hook that drives the sequence
   useEffect(() => {
@@ -106,6 +161,8 @@ export function useBatchProcessing() {
     batchError,
     startBatch,
     stopBatch,
+    resumeBatch,
+    clearBatch,
     internalGeneration: { progress, result, generating, generate, reset, abort, fixing, fixIssues },
   };
 }

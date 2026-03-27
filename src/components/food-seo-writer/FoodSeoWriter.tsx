@@ -84,6 +84,8 @@ export default function FoodSeoWriter() {
     currentBatchIndex,
     startBatch,
     stopBatch,
+    resumeBatch,
+    clearBatch,
     internalGeneration: {
       progress,
       result,
@@ -265,7 +267,7 @@ export default function FoodSeoWriter() {
   }, [reset, setBatchItems]);
 
   const showResults = inputs.batch.mode === "single" && result !== null;
-  const isBatchActive = inputs.batch.mode === "batch" && batchItems.length > 0;
+  const isBatchActive = batchItems.length > 0;
   const showProgress = generating || progress.currentStage !== "input";
   const hideForm = showResults || isBatchActive || generating;
 
@@ -546,6 +548,8 @@ export default function FoodSeoWriter() {
           currentIndex={currentBatchIndex}
           isProcessing={isBatchProcessing}
           onStop={stopBatch}
+          onResume={resumeBatch}
+          onClear={clearBatch}
         />
       )}
 

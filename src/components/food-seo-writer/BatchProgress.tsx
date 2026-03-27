@@ -6,9 +6,11 @@ interface BatchProgressProps {
   currentIndex: number;
   isProcessing: boolean;
   onStop: () => void;
+  onResume: () => void;
+  onClear: () => void;
 }
 
-export default function BatchProgress({ items, currentIndex, isProcessing, onStop }: BatchProgressProps) {
+export default function BatchProgress({ items, currentIndex, isProcessing, onStop, onResume, onClear }: BatchProgressProps) {
   const completed = items.filter(i => i.status === "completed").length;
   const total = items.length;
   const percent = Math.round((completed / total) * 100) || 0;
@@ -36,8 +38,44 @@ export default function BatchProgress({ items, currentIndex, isProcessing, onSto
               cursor: "pointer",
             }}
           >
-            Stop Batch
+            ⏹ Pause Batch
           </button>
+        )}
+        {!isProcessing && (
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              onClick={onClear}
+              style={{
+                padding: "8px 16px",
+                background: "transparent",
+                border: "1px solid #475569",
+                borderRadius: 6,
+                color: "#94a3b8",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              🗑 Clear Batch
+            </button>
+            {completed < total && (
+              <button
+                onClick={onResume}
+                style={{
+                  padding: "8px 16px",
+                  background: "#10b981",
+                  border: "none",
+                  borderRadius: 6,
+                  color: "#fff",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                ▶ Resume Processing
+              </button>
+            )}
+          </div>
         )}
       </div>
 
