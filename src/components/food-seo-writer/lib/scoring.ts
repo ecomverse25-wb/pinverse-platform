@@ -181,7 +181,9 @@ function scoreContentQuality(
 
   // Title-Content Count Match (1 pt) — for listicle/roundup posts
   const titleNumMatch = content.title.match(/(\d+)/);
-  const titleNum = titleNumMatch ? parseInt(titleNumMatch[1], 10) : 0;
+  let titleNum = titleNumMatch ? parseInt(titleNumMatch[1], 10) : 0;
+  if (titleNum > 15) titleNum = 15; // Cap at 15 to match generation rules
+  
   const isListicle = inputs.core.contentType === "Recipe Roundup/Listicle" || inputs.core.contentType === "Holiday/Seasonal";
   const contentH2s = getH2s(content.articleHtml);
   // Filter out non-recipe H2s (FAQ, intro, conclusion, tips, shopping lists, etc.)

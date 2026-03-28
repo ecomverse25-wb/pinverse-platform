@@ -171,6 +171,48 @@ export default function ArticleOutput({ content, keyword, inputs, provider, onCo
     }
   }, [content, inputs, provider, keyword, onContentUpdate]);
 
+  // Regenerate an existing image that was already generated
+  const handleRegenerateExisting = useCallback(async (altText: string, rawHtmlToReplace: string) => {
+    // Generate an ID for loading state
+    setRegeneratingIndex(999); // Use special index to show loading generally or modify state to track exact image
+    setRegenProgress(`Regenerating existing image: "${altText.substring(0, 50)}..."`);
+    
+    try {
+      const result = await generateImageAction(
+        content.title,
+        `Image Subject: ${altText}`,
+        inputs.imageSettings.promptInstructions,
+        inputs.imageSettings.style,
+        inputs.imageSettings.colorMood,
+        inputs.imageSettings.dimensions,
+        provider as any,
+        inputs.imageSettings.imgbbApiKey,
+        'inline'
+      );
+
+      if (result.success && result.imageUrl) {
+        let updatedHtml = content.articleHtml;
+        const pinDesc = `${altText} - ${keyword}`.replace(/"/g, "&quot;");
+        const replacement = `<figure class="wp-block-image size-large">\n  <img src="${result.imageUrl}" alt="${altText.replace(/"/g, "&quot;")}" data-pin-description="${pinDesc}" />\n</figure>`;
+        
+        // Exact replace the old image/figure with the new one
+        updatedHtml = updatedHtml.replace(rawHtmlToReplace, replacement);
+        
+        if (onContentUpdate) {
+          onContentUpdate(updatedHtml);
+        }
+        setRegenProgress(`✅ Image regenerated successfully!`);
+      } else {
+        setRegenProgress(`❌ Failed: ${result.error || "Unknown error"}`);
+      }
+    } catch (err: any) {
+      setRegenProgress(`❌ Error: ${err.message || "Failed to generate image"}`);
+    } finally {
+      setRegeneratingIndex(null);
+      setTimeout(() => setRegenProgress(""), 4000);
+    }
+  }, [content, inputs, provider, keyword, onContentUpdate]);
+
   // Regenerate ALL missing images
   const handleRegenerateAll = useCallback(async () => {
     if (placeholders.length === 0) return;
@@ -412,13 +454,14 @@ export default function ArticleOutput({ content, keyword, inputs, provider, onCo
             }}
           >
             {/* Render with interactive placeholder buttons */}
-            <PreviewWithImageButtons
-              html={displayHtml}
-              placeholders={placeholders}
-              regeneratingIndex={regeneratingIndex}
-              regeneratingAll={regeneratingAll}
-              onRegenerate={handleRegenerateOne}
-            />
+              <PreviewWithImageButtons
+                html={displayHtml}
+                placeholders={placeholders}
+                regeneratingIndex={regeneratingIndex}
+                regeneratingAll={regeneratingAll}
+                onRegenerate={handleRegenerateOne}
+                onRegenerateExisting={handleRegenerateExisting}
+              />
           </div>
         ) : (
           <pre
@@ -584,20 +627,24 @@ function PreviewWithImageButtons({
   regeneratingIndex,
   regeneratingAll,
   onRegenerate,
+  onRegenerateExisting,
 }: {
   html: string;
   placeholders: { altText: string; index: number }[];
   regeneratingIndex: number | null;
   regeneratingAll: boolean;
   onRegenerate: (altText: string, idx: number) => void;
+  onRegenerateExisting?: (altText: string, rawHtml: string) => void;
 }) {
-  // Split HTML by placeholder divs and inject buttons
-  const parts = html.split(/(<div[^>]*class="image-placeholder"[^>]*>[\s\S]*?<\/div>)/gi);
+  // Split HTML by placeholder divs AND existing image tags/figures
+  const parts = html.split(/(<div[^>]*class="image-placeholder"[^>]*>[\s\S]*?<\/div>|<figure[^>]*>[\s\S]*?<img[^>]*>[\s\S]*?<\/figure>|<img[^>]+src=["'](?:(?!image-placeholder)[^"'])+["'][^>]*>)/gi);
   let placeholderCounter = 0;
 
   return (
     <>
       {parts.map((part, i) => {
+        if (!part) return null;
+
         if (/class="image-placeholder"/i.test(part)) {
           const idx = placeholderCounter++;
           const ph = placeholders[idx];
@@ -645,7 +692,49 @@ function PreviewWithImageButtons({
               </button>
             </div>
           );
+        } else if (/(<figure|<img)/i.test(part) && onRegenerateExisting) {
+          // This is a generated image! Let's extract the alt text from it
+          const altMatch = part.match(/alt=["']([^"']+)["']/i);
+          const altText = altMatch ? altMatch[1] : "Existing Image";
+          const isCurrentlyGenerating = regeneratingIndex === 999 || regeneratingAll;
+
+          return (
+            <div key={`img-container-${i}`} style={{ position: "relative", marginBottom: 24 }}>
+              <div dangerouslySetInnerHTML={{ __html: part }} />
+              <div style={{ textAlign: "center", marginTop: 8 }}>
+                <button
+                  onClick={() => onRegenerateExisting(altText, part)}
+                  disabled={isCurrentlyGenerating}
+                  style={{
+                    padding: "6px 16px",
+                    background: isCurrentlyGenerating ? "#334155" : "rgba(15, 23, 42, 0.8)",
+                    border: "1px solid rgba(148, 163, 184, 0.3)",
+                    borderRadius: 6,
+                    color: "#e2e8f0",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: isCurrentlyGenerating ? "not-allowed" : "pointer",
+                    transition: "all 0.2s",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6
+                  }}
+                  onMouseEnter={(e) => {
+                    const t = e.currentTarget as HTMLButtonElement;
+                    if (!isCurrentlyGenerating) t.style.background = "rgba(217, 119, 6, 0.9)";
+                  }}
+                  onMouseLeave={(e) => {
+                    const t = e.currentTarget as HTMLButtonElement;
+                    if (!isCurrentlyGenerating) t.style.background = "rgba(15, 23, 42, 0.8)";
+                  }}
+                >
+                  {isCurrentlyGenerating ? "⏳ Regenerating..." : "🔄 Regenerate Graphic"}
+                </button>
+              </div>
+            </div>
+          );
         }
+        
         return <div key={`content-${i}`} dangerouslySetInnerHTML={{ __html: part }} />;
       })}
     </>

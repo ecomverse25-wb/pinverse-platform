@@ -148,9 +148,15 @@ ${(() => {
   // For roundup/listicle posts, extract the number from the keyword or title to enforce H2 count
   const isRoundup = contentType === 'Recipe Roundup/Listicle' || contentType === 'Holiday/Seasonal';
   const numMatch = keyword.match(/(\d+)/)
-  const titleNum = numMatch ? parseInt(numMatch[1], 10) : 0;
+  let titleNum = numMatch ? parseInt(numMatch[1], 10) : 0;
+  let instruction = '';
+  
   if (isRoundup && titleNum >= 5) {
-    return `- CRITICAL: The keyword contains the number ${titleNum}. You MUST plan EXACTLY ${titleNum} recipe H2 sections in the outline (plus intro/FAQ/conclusion H2s). The reader expects ${titleNum} items. Each recipe H2 MUST have hasImagePlacement: true.\n- Plan ${titleNum + 4} total H2 sections (${titleNum} recipes + intro + FAQ + conclusion + tips)\n`;
+    if (titleNum > 15) {
+      instruction = `- CRITICAL MAX LIMIT: The keyword contains a large number (${titleNum}), but you MUST CAP the listicle at exactly 15 items to maintain high quality. The SEO title you generate MUST use the number 15 (e.g. "15 Best...").\n`;
+      titleNum = 15;
+    }
+    return instruction + `- CRITICAL: You MUST plan EXACTLY ${titleNum} recipe H2 sections in the outline (plus intro/FAQ/conclusion H2s). The reader expects ${titleNum} items. Each recipe H2 MUST have hasImagePlacement: true.\n- Plan ${titleNum + 4} total H2 sections (${titleNum} recipes + intro + FAQ + conclusion + tips)\n`;
   }
   return `- Plan ${Math.ceil((wordRange.min + wordRange.max) / 2 / 150)} H2 sections\n`;
 })()}- Each H2 section should target 134-167 words (optimal for AI citation engines)
@@ -368,15 +374,17 @@ ${(() => {
   // LISTICLE COUNT ENFORCEMENT
   const isRoundup = inputs.core.contentType === 'Recipe Roundup/Listicle' || inputs.core.contentType === 'Holiday/Seasonal';
   const numMatch = research.title.match(/(\d+)/);
-  const titleNum = numMatch ? parseInt(numMatch[1], 10) : 0;
+  let titleNum = numMatch ? parseInt(numMatch[1], 10) : 0;
+  if (titleNum > 15) titleNum = 15;
+  
   if (isRoundup && titleNum >= 5) {
-    return `LISTICLE COUNT ENFORCEMENT (MANDATORY):
-- The title promises ${titleNum} items. You MUST write EXACTLY ${titleNum} recipe H2 sections in the article body.
-- Each of the ${titleNum} recipes MUST have: (1) an H2 heading, (2) a descriptive paragraph, (3) an image placeholder, (4) a practical tip.
-- Do NOT write fewer than ${titleNum} recipe sections. Do NOT combine multiple recipes into one section.
-- Number each recipe implicitly through unique H2 headings (do not use "1.", "2." numbering in headings).
-- After all ${titleNum} recipe sections, include the FAQ section and conclusion.
-`;
+    return `LISTICLE COUNT ENFORCEMENT (CRITICAL MANDATE):
+- The topic specifies ${titleNum} distinct items. You MUST write EXACTLY ${titleNum} distinct recipe H2 sections in the article body.
+- CRITICAL: Do NOT write generic categorical H2s (e.g. "Vibrant Lunches", "Nourishing Soups"). Every H2 MUST be a specific, numbered recipe title (e.g. "1. Golden Milk Chicken Soup", "2. Roasted Turmeric Cauliflower", etc).
+- Each of the ${titleNum} recipes MUST have: (1) a numbered H2 heading, (2) a descriptive paragraph outlining why it's great, (3) an image placeholder, (4) a practical tip.
+- Do NOT combine multiple recipes under one section. You MUST have ${titleNum} separate H2s for recipes.
+- After all ${titleNum} recipe sections are completed, then you may include the FAQ section and conclusion.
+- Failure to provide exactly ${titleNum} numbered distinct recipe H2 sections will result in rejection.`;
   }
   return '';
 })()}
