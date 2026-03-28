@@ -402,7 +402,7 @@ export function useContentGeneration() {
         setGenerating(false);
       }
     },
-    [addLog, setStage]
+    [addLog, setStage, processImages]
   );
 
   // ─── Fix Issues (re-run Stages 3-4 per Correction 6) ───
@@ -423,6 +423,28 @@ export function useContentGeneration() {
         addLog("🔧 Re-running content generation with issue corrections...");
         setStage("content", "active");
 
+        // Collect existing real image URLs from old content (to preserve them)
+        const existingImageMap = new Map<string, string>();
+        const imgTagRegex = /<img[^>]+src=["']([^"']+)["'][^>]*alt=["']([^"']*)["'][^>]*>/gi;
+        let imgMatch;
+        while ((imgMatch = imgTagRegex.exec(result.content.articleHtml)) !== null) {
+          const src = imgMatch[1];
+          const alt = imgMatch[2];
+          if (src.startsWith('http') || src.startsWith('data:')) {
+            existingImageMap.set(alt.toLowerCase().trim(), src);
+          }
+        }
+        // Also scan for reverse order (alt before src)
+        const imgTagRegex2 = /<img[^>]+alt=["']([^"']*)["'][^>]*src=["']([^"']+)["'][^>]*>/gi;
+        while ((imgMatch = imgTagRegex2.exec(result.content.articleHtml)) !== null) {
+          const alt = imgMatch[1];
+          const src = imgMatch[2];
+          if (src.startsWith('http') || src.startsWith('data:')) {
+            existingImageMap.set(alt.toLowerCase().trim(), src);
+          }
+        }
+        addLog(`🔧 Preserving ${existingImageMap.size} existing images...`);
+
         // Re-run Stage 3 with corrections
         const contentResult = await generateContentAction(
           inputs,
@@ -438,12 +460,59 @@ export function useContentGeneration() {
         setStage("content", "completed");
         addLog(`✓ Content re-generated with fixes. ${contentResult.wordCount || 0} words.`);
 
+        // Restore existing image URLs into the new content
+        let fixedContent = contentResult.content;
+        const placeholderImgRegex = /<img([^>]*)src=["']image-placeholder["']([^>]*)>/gi;
+        fixedContent = fixedContent.replace(placeholderImgRegex, (fullMatch, before, after) => {
+          const altMatch = (before + after).match(/alt=["']([^"']*)["']/i);
+          if (altMatch) {
+            const altKey = altMatch[1].toLowerCase().trim();
+            // Try exact match first, then fuzzy (first 30 chars)
+            let existingUrl = existingImageMap.get(altKey);
+            if (!existingUrl) {
+              const altShort = altKey.substring(0, 30);
+              for (const [key, url] of existingImageMap.entries()) {
+                if (key.startsWith(altShort) || altShort.startsWith(key.substring(0, 30))) {
+                  existingUrl = url;
+                  break;
+                }
+              }
+            }
+            if (existingUrl) {
+              return `<img${before}src="${existingUrl}"${after}>`;
+            }
+          }
+          return fullMatch;
+        });
+
+        // Re-run image generation for any remaining placeholders
+        let finalImages = result.generatedImages || [];
+        if (inputs.imageSettings.enabled) {
+          const remainingPlaceholders = (fixedContent.match(/src=["']image-placeholder["']/gi) || []).length;
+          if (remainingPlaceholders > 0) {
+            addLog(`🔧 Generating ${remainingPlaceholders} new images for new sections...`);
+            setStage("images", "active");
+            const imageResult = await processImages(
+              fixedContent,
+              contentResult.title || result.content.title,
+              inputs,
+              provider,
+              addLog
+            );
+            if (imageResult.success) {
+              fixedContent = imageResult.updatedHtml;
+              finalImages = [...finalImages, ...imageResult.generatedImages];
+            }
+            setStage("images", "completed");
+          }
+        }
+
         // Re-run Stage 4
         setStage("seo", "active");
         addLog("🔧 Re-running SEO optimization...");
 
         const seoResult = await optimizeSeoAction(
-          contentResult.content,
+          fixedContent,
           contentResult.title || result.content.title,
           contentResult.metaDescription || result.content.metaDescription,
           inputs.core.mainKeyword,
@@ -451,7 +520,7 @@ export function useContentGeneration() {
           `Ensure these SEO issues are fixed:\n${issues}`
         );
 
-        const finalContent = seoResult.optimizedContent || contentResult.content;
+        const finalContent = seoResult.optimizedContent || fixedContent;
         const finalTitle = seoResult.optimizedTitle || contentResult.title || result.content.title;
         const finalMeta = seoResult.optimizedMetaDescription || contentResult.metaDescription || result.content.metaDescription;
 
@@ -497,6 +566,7 @@ export function useContentGeneration() {
           schemas,
           quality: qualityScore,
           aiDetection,
+          generatedImages: finalImages,
         });
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : "Fix failed";
@@ -505,7 +575,7 @@ export function useContentGeneration() {
         setFixing(false);
       }
     },
-    [result, addLog, setStage]
+    [result, addLog, setStage, processImages]
   );
 
   const reset = useCallback(() => {
@@ -525,6 +595,7 @@ export function useContentGeneration() {
   return {
     progress,
     result,
+    setResult,
     generating,
     fixing,
     generate,

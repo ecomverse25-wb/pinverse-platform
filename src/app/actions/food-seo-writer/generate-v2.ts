@@ -144,8 +144,16 @@ Return this EXACT JSON structure:
 CRITICAL OUTLINE RULES:
 - H1 title MUST include the main keyword "${keyword}" and be 50-60 characters
 - NEVER use the exact phrase "${keyword}" in more than 2 H2 headings — vary with synonyms and natural language
-- Plan ${Math.ceil((wordRange.min + wordRange.max) / 2 / 150)} H2 sections
-- Each H2 section should target 134-167 words (optimal for AI citation engines)
+${(() => {
+  // For roundup/listicle posts, extract the number from the keyword or title to enforce H2 count
+  const isRoundup = contentType === 'Recipe Roundup/Listicle' || contentType === 'Holiday/Seasonal';
+  const numMatch = keyword.match(/(\d+)/)
+  const titleNum = numMatch ? parseInt(numMatch[1], 10) : 0;
+  if (isRoundup && titleNum >= 5) {
+    return `- CRITICAL: The keyword contains the number ${titleNum}. You MUST plan EXACTLY ${titleNum} recipe H2 sections in the outline (plus intro/FAQ/conclusion H2s). The reader expects ${titleNum} items. Each recipe H2 MUST have hasImagePlacement: true.\n- Plan ${titleNum + 4} total H2 sections (${titleNum} recipes + intro + FAQ + conclusion + tips)\n`;
+  }
+  return `- Plan ${Math.ceil((wordRange.min + wordRange.max) / 2 / 150)} H2 sections\n`;
+})()}- Each H2 section should target 134-167 words (optimal for AI citation engines)
 - Plan image placements every 300-400 words
 - Plan affiliate link placements max 1 per 300 words, contextually relevant
 - Include an FAQ section H2 with 5-7 sub-headings (H3)
@@ -355,6 +363,23 @@ ${inputs.advanced.includeRecipeCard ? `- Recipe card: Full structured recipe usi
   - [Scaling notes]` : ""}
 ${inputs.advanced.includeFaqSection ? "- FAQ section: 5-7 questions with concise answers (50-100 words each)" : ""}
 - Conclusion: 2-3 sentences with call-to-action. End every article with a closing paragraph containing one internal link to a user-provided category URL (if available).
+
+${(() => {
+  // LISTICLE COUNT ENFORCEMENT
+  const isRoundup = inputs.core.contentType === 'Recipe Roundup/Listicle' || inputs.core.contentType === 'Holiday/Seasonal';
+  const numMatch = research.title.match(/(\d+)/);
+  const titleNum = numMatch ? parseInt(numMatch[1], 10) : 0;
+  if (isRoundup && titleNum >= 5) {
+    return `LISTICLE COUNT ENFORCEMENT (MANDATORY):
+- The title promises ${titleNum} items. You MUST write EXACTLY ${titleNum} recipe H2 sections in the article body.
+- Each of the ${titleNum} recipes MUST have: (1) an H2 heading, (2) a descriptive paragraph, (3) an image placeholder, (4) a practical tip.
+- Do NOT write fewer than ${titleNum} recipe sections. Do NOT combine multiple recipes into one section.
+- Number each recipe implicitly through unique H2 headings (do not use "1.", "2." numbering in headings).
+- After all ${titleNum} recipe sections, include the FAQ section and conclusion.
+`;
+  }
+  return '';
+})()}
 
 ${productLinksSection}
 ${productCatalogSection}
