@@ -9,17 +9,13 @@ import { getUser } from "@/lib/supabase";
 interface NicheStats {
   keywords_available: number;
   keywords_used: number;
+  error?: string;
 }
 
 interface Stats {
   date: string;
   products: number;
-  niches: {
-    sourcerecipes: NicheStats;
-    kitchentools4u: NicheStats;
-    pets: NicheStats;
-    home_decor: NicheStats;
-  };
+  niches: Record<string, NicheStats>;
   budget: {
     spent_today: number;
     daily_limit: number;
@@ -175,8 +171,31 @@ export default function HermesDashboard() {
         setHermesOnline(false);
       }
 
-      if (statsRes.status === "fulfilled") {
-        setStats(statsRes.value);
+      if (statsRes.status === "fulfilled" && statsRes.value && !statsRes.value.error) {
+        const raw = statsRes.value;
+        // Normalize stats with safe defaults
+        const safeStats: Stats = {
+          date: raw.date || new Date().toISOString().slice(0, 10),
+          products: raw.products ?? 0,
+          niches: {},
+          budget: {
+            spent_today: raw.budget?.spent_today ?? 0,
+            daily_limit: raw.budget?.daily_limit ?? 5,
+            percent_used: raw.budget?.percent_used ?? 0,
+          },
+        };
+        // Normalize each niche — skip any that are error objects
+        if (raw.niches && typeof raw.niches === "object") {
+          for (const [key, val] of Object.entries(raw.niches)) {
+            const n = val as NicheStats | undefined;
+            if (n && !n.error && typeof n.keywords_available === "number") {
+              safeStats.niches[key] = n;
+            } else {
+              safeStats.niches[key] = { keywords_available: 0, keywords_used: 0 };
+            }
+          }
+        }
+        setStats(safeStats);
       }
 
       if (draftsRes.status === "fulfilled") {
@@ -409,7 +428,7 @@ export default function HermesDashboard() {
         <div className="rounded-xl p-5 bg-gray-900 border border-gray-800 space-y-2">
           <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Products</p>
           <p className="text-2xl font-bold text-white">
-            {stats ? stats.products.toLocaleString() : "—"}
+            {stats ? (stats.products ?? 0).toLocaleString() : "—"}
           </p>
           <p className="text-gray-400 text-xs">kitchentools4u.com</p>
         </div>
@@ -417,15 +436,15 @@ export default function HermesDashboard() {
         {/* Budget */}
         <div className="rounded-xl p-5 bg-gray-900 border border-gray-800 space-y-2">
           <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Daily Budget</p>
-          <p className={`text-2xl font-bold ${stats ? budgetColor(stats.budget.percent_used).text : "text-white"}`}>
-            ${stats ? stats.budget.spent_today.toFixed(2) : "—"}
+          <p className={`text-2xl font-bold ${stats ? budgetColor(stats.budget?.percent_used ?? 0).text : "text-white"}`}>
+            ${stats ? (stats.budget?.spent_today ?? 0).toFixed(2) : "—"}
             <span className="text-gray-400 text-sm font-normal"> / $5.00</span>
           </p>
           {stats && (
             <div className="w-full h-1.5 rounded-full bg-gray-800 overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${budgetColor(stats.budget.percent_used).bar}`}
-                style={{ width: `${Math.min(stats.budget.percent_used, 100)}%` }}
+                className={`h-full rounded-full transition-all duration-500 ${budgetColor(stats.budget?.percent_used ?? 0).bar}`}
+                style={{ width: `${Math.min(stats.budget?.percent_used ?? 0, 100)}%` }}
               />
             </div>
           )}
@@ -433,16 +452,16 @@ export default function HermesDashboard() {
 
         {/* Per-niche keyword cards */}
         {stats &&
-          (Object.keys(stats.niches) as Array<keyof typeof stats.niches>).map((key) => (
+          Object.keys(stats.niches).map((key) => (
             <div key={key} className="rounded-xl p-5 bg-gray-900 border border-gray-800 space-y-2">
               <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">
                 {NICHE_LABELS[key] || key}
               </p>
               <p className="text-2xl font-bold text-white">
-                {stats.niches[key].keywords_available.toLocaleString()}
+                {(stats.niches[key]?.keywords_available ?? 0).toLocaleString()}
               </p>
               <p className="text-gray-400 text-xs">
-                keywords available · {stats.niches[key].keywords_used} used
+                keywords available · {stats.niches[key]?.keywords_used ?? 0} used
               </p>
             </div>
           ))}
