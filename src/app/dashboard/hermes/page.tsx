@@ -361,7 +361,7 @@ export default function HermesDashboard() {
           <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-2">
             ⚡ Hermes Control Center
           </h1>
-          <p className="text-gray-400 text-sm mt-1">
+          <p className="text-gray-300 text-sm mt-1">
             Private content automation dashboard
           </p>
         </div>
@@ -407,19 +407,19 @@ export default function HermesDashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Products */}
         <div className="rounded-xl p-5 bg-gray-900 border border-gray-800 space-y-2">
-          <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Products</p>
+          <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Products</p>
           <p className="text-2xl font-bold text-white">
             {stats ? stats.products.toLocaleString() : "—"}
           </p>
-          <p className="text-gray-500 text-xs">kitchentools4u.com</p>
+          <p className="text-gray-400 text-xs">kitchentools4u.com</p>
         </div>
 
         {/* Budget */}
         <div className="rounded-xl p-5 bg-gray-900 border border-gray-800 space-y-2">
-          <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Daily Budget</p>
+          <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Daily Budget</p>
           <p className={`text-2xl font-bold ${stats ? budgetColor(stats.budget.percent_used).text : "text-white"}`}>
             ${stats ? stats.budget.spent_today.toFixed(2) : "—"}
-            <span className="text-gray-500 text-sm font-normal"> / $5.00</span>
+            <span className="text-gray-400 text-sm font-normal"> / $5.00</span>
           </p>
           {stats && (
             <div className="w-full h-1.5 rounded-full bg-gray-800 overflow-hidden">
@@ -435,13 +435,13 @@ export default function HermesDashboard() {
         {stats &&
           (Object.keys(stats.niches) as Array<keyof typeof stats.niches>).map((key) => (
             <div key={key} className="rounded-xl p-5 bg-gray-900 border border-gray-800 space-y-2">
-              <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">
+              <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">
                 {NICHE_LABELS[key] || key}
               </p>
               <p className="text-2xl font-bold text-white">
                 {stats.niches[key].keywords_available.toLocaleString()}
               </p>
-              <p className="text-gray-500 text-xs">
+              <p className="text-gray-400 text-xs">
                 keywords available · {stats.niches[key].keywords_used} used
               </p>
             </div>
@@ -451,9 +451,9 @@ export default function HermesDashboard() {
         {!stats &&
           ["Recipes", "Kitchen", "Pets", "Decor"].map((label) => (
             <div key={label} className="rounded-xl p-5 bg-gray-900 border border-gray-800 space-y-2">
-              <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">{label}</p>
-              <p className="text-2xl font-bold text-gray-700">—</p>
-              <p className="text-gray-600 text-xs">keywords available</p>
+              <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider">{label}</p>
+              <p className="text-2xl font-bold text-gray-600">—</p>
+              <p className="text-gray-500 text-xs">keywords available</p>
             </div>
           ))}
       </div>
@@ -465,7 +465,7 @@ export default function HermesDashboard() {
         <div className="grid sm:grid-cols-[1fr_2fr] gap-4">
           {/* Niche selector */}
           <div className="space-y-1.5">
-            <label className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Niche</label>
+            <label className="text-gray-300 text-xs font-semibold uppercase tracking-wider">Niche</label>
             <select
               value={niche}
               onChange={(e) => setNiche(e.target.value)}
@@ -479,14 +479,14 @@ export default function HermesDashboard() {
 
           {/* Keyword input */}
           <div className="space-y-1.5">
-            <label className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Keyword</label>
+            <label className="text-gray-300 text-xs font-semibold uppercase tracking-wider">Keyword</label>
             <input
               type="text"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && runArticle()}
               placeholder="e.g. best air fryer recipes"
-              className="w-full rounded-lg bg-gray-800 border border-gray-700 text-white px-3 py-2.5 text-sm placeholder-gray-600 focus:outline-none focus:border-yellow-500/50 transition"
+              className="w-full rounded-lg bg-gray-800 border border-gray-700 text-white px-3 py-2.5 text-sm placeholder-gray-500 focus:outline-none focus:border-yellow-500/50 transition"
             />
           </div>
         </div>
@@ -500,8 +500,8 @@ export default function HermesDashboard() {
               onChange={(e) => setDryRun(e.target.checked)}
               className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-yellow-500 focus:ring-yellow-500/30 focus:ring-offset-0 accent-yellow-500"
             />
-            <span className="text-sm text-gray-300">Dry run</span>
-            <span className="text-xs text-gray-500">(no publish)</span>
+            <span className="text-sm text-white">Dry run</span>
+            <span className="text-xs text-gray-400">(no publish)</span>
           </label>
 
           {/* Run button */}
@@ -532,7 +532,7 @@ export default function HermesDashboard() {
                   Keyword: <span className="text-white font-medium">{activeJob.keyword}</span>
                 </span>
               </div>
-              <span className="text-gray-600 text-xs font-mono">{activeJob.job_id}</span>
+              <span className="text-gray-500 text-xs font-mono">{activeJob.job_id}</span>
             </div>
 
             {activeJob.output && (
@@ -556,13 +556,13 @@ export default function HermesDashboard() {
       {/* ── SECTION 4 — Upload Keywords ───────────────────────────────── */}
       <div className="rounded-xl bg-gray-900 border border-gray-800 p-6 space-y-4">
         <h2 className="text-lg font-bold text-yellow-400">📋 Upload Keywords</h2>
-        <p className="text-gray-400 text-sm">
+        <p className="text-gray-300 text-sm">
           Export from PinClicks.com — Format: ID, Label, URL, Search Volume, Followers
         </p>
 
         <div className="grid sm:grid-cols-[200px_1fr] gap-4">
           <div className="space-y-1.5">
-            <label className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Niche</label>
+            <label className="text-gray-300 text-xs font-semibold uppercase tracking-wider">Niche</label>
             <select
               value={csvNiche}
               onChange={(e) => setCsvNiche(e.target.value)}
@@ -575,13 +575,13 @@ export default function HermesDashboard() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-gray-400 text-xs font-semibold uppercase tracking-wider">CSV Content</label>
+            <label className="text-gray-300 text-xs font-semibold uppercase tracking-wider">CSV Content</label>
             <textarea
               value={csvText}
               onChange={(e) => setCsvText(e.target.value)}
               rows={5}
               placeholder="Paste PinClicks CSV content here..."
-              className="w-full rounded-lg bg-gray-800 border border-gray-700 text-white px-3 py-2.5 text-sm placeholder-gray-600 font-mono focus:outline-none focus:border-yellow-500/50 transition resize-y"
+              className="w-full rounded-lg bg-gray-800 border border-gray-700 text-white px-3 py-2.5 text-sm placeholder-gray-500 font-mono focus:outline-none focus:border-yellow-500/50 transition resize-y"
             />
           </div>
         </div>
@@ -624,7 +624,7 @@ export default function HermesDashboard() {
         </div>
 
         {drafts.length === 0 ? (
-          <p className="text-gray-500 text-sm py-4 text-center">No pending drafts.</p>
+          <p className="text-gray-400 text-sm py-4 text-center">No pending drafts.</p>
         ) : (
           <div className="space-y-2">
             {drafts.map((draft) => (
@@ -637,11 +637,11 @@ export default function HermesDashboard() {
                     {draft.title}
                   </p>
                   <div className="flex items-center gap-3 mt-1">
-                    <span className="text-gray-500 text-xs">ID: {draft.id}</span>
+                    <span className="text-gray-400 text-xs">ID: {draft.id}</span>
                     <span className={`text-xs ${draft.featured_media > 0 ? "text-emerald-400" : "text-yellow-500"}`}>
                       {draft.featured_media > 0 ? "✅ Image" : "⚠️ No image"}
                     </span>
-                    <span className="text-gray-500 text-xs">{draft.date}</span>
+                    <span className="text-gray-400 text-xs">{draft.date}</span>
                   </div>
                 </div>
                 <a
@@ -660,7 +660,7 @@ export default function HermesDashboard() {
 
       {/* ── SECTION 6 — Footer ────────────────────────────────────────── */}
       <div className="text-center py-6 border-t border-gray-800">
-        <p className="text-gray-600 text-xs">
+        <p className="text-gray-500 text-xs">
           Hermes Content OS v2.0 · Private Dashboard · Emarketing Solutions
         </p>
       </div>
