@@ -128,6 +128,7 @@ export default function HermesDashboard() {
 
   // Sync
   const [syncing, setSyncing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Feedback
   const [message, setMessage] = useState("");
@@ -158,6 +159,7 @@ export default function HermesDashboard() {
   // ── Data loading ─────────────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
+    setRefreshing(true);
     try {
       const [healthRes, statsRes, draftsRes] = await Promise.allSettled([
         hermesGet("/health"),
@@ -203,6 +205,8 @@ export default function HermesDashboard() {
       }
     } catch {
       setHermesOnline(false);
+    } finally {
+      setRefreshing(false);
     }
   }, []);
 
@@ -300,11 +304,13 @@ export default function HermesDashboard() {
         csv_content: csvText,
         filename: `pinclicks_${csvNiche}_${Date.now()}.csv`,
       });
+      console.log("Upload response:", res);
       if (res.success) {
         setMessage(`✅ Uploaded ${res.keyword_count} keywords to ${csvNiche}`);
         setCsvText("");
+        loadData();
       } else {
-        setError("Upload failed");
+        setError(res.detail || res.error || "Upload failed — check server logs");
       }
     } catch (err) {
       setError(`Upload error: ${err}`);
@@ -401,9 +407,14 @@ export default function HermesDashboard() {
           {/* Refresh */}
           <button
             onClick={loadData}
-            className="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700 transition-all"
+            disabled={refreshing}
+            className="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700 transition-all disabled:opacity-50"
           >
-            ↻ Refresh
+            {refreshing ? (
+              <span className="flex items-center gap-1.5"><Spinner className="text-gray-300" /> Refreshing…</span>
+            ) : (
+              "↻ Refresh"
+            )}
           </button>
         </div>
       </div>
