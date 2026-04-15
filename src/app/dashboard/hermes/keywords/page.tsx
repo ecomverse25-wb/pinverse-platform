@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import ConfirmModal from "@/components/hermes/ConfirmModal";
 import {
   hermesGet,
@@ -19,6 +19,146 @@ function Spinner({ className = "" }: { className?: string }) {
   );
 }
 
+// ── CSV Parsing Utilities ────────────────────────────────────────────────────
+
+/** Parse a single CSV line respecting quoted fields */
+function parseCSVLine(line: string): string[] {
+  const fields: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
+        current += '"';
+        i++; // skip escaped quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === ',' && !inQuotes) {
+      fields.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  fields.push(current);
+  return fields;
+}
+
+type CsvFormat = "pinclicks" | "simple" | "unknown";
+
+interface ParsedKeyword {
+  id: string;
+  keyword: string;
+  search_volume: number;
+  followers: number;
+  url: string;
+}
+
+/** Auto-detect CSV format and parse keywords */
+function parseCsv(csvText: string): {
+  format: CsvFormat;
+  keywords: ParsedKeyword[];
+  errors: string[];
+} {
+  const lines = csvText.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length === 0) {
+    return { format: "unknown", keywords: [], errors: ["CSV is empty"] };
+  }
+
+  const errors: string[] = [];
+  const keywords: ParsedKeyword[] = [];
+  const seen = new Set<string>();
+
+  // Detect header
+  const firstLine = lines[0].toLowerCase().trim();
+  const hasHeader =
+    firstLine.includes("label") ||
+    firstLine.includes("keyword") ||
+    firstLine.includes("search volume") ||
+    firstLine.includes("search_volume") ||
+    firstLine.includes("followers") ||
+    /^id\s*,/.test(firstLine);
+  const startIdx = hasHeader ? 1 : 0;
+
+  // Determine format from first data line
+  const sampleLine = lines[startIdx] || lines[0];
+  const sampleFields = parseCSVLine(sampleLine);
+  let format: CsvFormat = "unknown";
+
+  if (sampleFields.length >= 4) {
+    format = "pinclicks"; // ID, Label, URL, Search Volume[, Followers]
+  } else if (sampleFields.length >= 2) {
+    // Check if second field is numeric → simple format
+    const secondTrimmed = sampleFields[1].trim().replace(/"/g, "");
+    if (/^\d+$/.test(secondTrimmed) || secondTrimmed === "0") {
+      format = "simple";
+    } else if (sampleFields.length === 2) {
+      format = "simple"; // Assume simple: Keyword, Volume
+    }
+  } else if (sampleFields.length === 1) {
+    format = "simple"; // Single keyword per line
+  }
+
+  if (format === "unknown") {
+    return {
+      format,
+      keywords: [],
+      errors: [
+        "Could not detect CSV format. Expected one of:\n• ID, Label, URL, Search Volume, Followers (PinClicks)\n• Keyword, Search Volume (simple)",
+      ],
+    };
+  }
+
+  for (let i = startIdx; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    const fields = parseCSVLine(line);
+    let keyword = "";
+    let searchVolume = 0;
+    let followers = 0;
+    let url = "";
+    let id = "";
+
+    if (format === "pinclicks" && fields.length >= 4) {
+      id = fields[0].trim();
+      keyword = fields[1].trim().replace(/^"|"$/g, "");
+      url = fields[2].trim();
+      searchVolume = parseInt(fields[3].trim(), 10) || 0;
+      followers = fields.length >= 5 ? parseInt(fields[4].trim(), 10) || 0 : 0;
+    } else if (format === "simple") {
+      keyword = fields[0].trim().replace(/^"|"$/g, "");
+      searchVolume = fields.length >= 2 ? parseInt(fields[1].trim(), 10) || 0 : 0;
+    }
+
+    if (!keyword) {
+      errors.push(`Line ${i + 1}: empty keyword, skipped`);
+      continue;
+    }
+
+    const normalizedKey = keyword.toLowerCase();
+    if (seen.has(normalizedKey)) {
+      continue; // Skip duplicates silently
+    }
+    seen.add(normalizedKey);
+
+    keywords.push({
+      id: id || `kw_${Date.now()}_${i}`,
+      keyword,
+      search_volume: searchVolume,
+      followers,
+      url,
+    });
+  }
+
+  return { format, keywords, errors };
+}
+
+// ── Main Component ───────────────────────────────────────────────────────────
+
 export default function KeywordsPage() {
   const [sites, setSites] = useState<Site[]>([]);
   const [selectedNiche, setSelectedNiche] = useState("");
@@ -30,6 +170,12 @@ export default function KeywordsPage() {
   // Upload
   const [csvText, setCsvText] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [parsedPreview, setParsedPreview] = useState<{
+    format: CsvFormat;
+    keywords: ParsedKeyword[];
+    errors: string[];
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Filter / Pagination
   const [statusFilter, setStatusFilter] = useState<"all" | "available" | "used">("all");
@@ -51,6 +197,16 @@ export default function KeywordsPage() {
   useEffect(() => {
     if (error) { const t = setTimeout(() => setError(""), 8000); return () => clearTimeout(t); }
   }, [error]);
+
+  // Auto-parse CSV whenever text changes
+  useEffect(() => {
+    if (!csvText.trim()) {
+      setParsedPreview(null);
+      return;
+    }
+    const result = parseCsv(csvText);
+    setParsedPreview(result);
+  }, [csvText]);
 
   // Load sites
   useEffect(() => {
@@ -96,22 +252,46 @@ export default function KeywordsPage() {
     setPage(0);
   }, [loadKeywords]);
 
-  // Upload CSV
+  // Upload CSV — sends pre-parsed keywords + raw CSV as fallback
   const uploadKeywords = async () => {
     if (!csvText.trim() || !selectedNiche) return;
-    setUploading(true);
-    const res = await hermesPost(`/keywords/${selectedNiche}/upload`, {
-      csv_content: csvText,
-      filename: `pinclicks_${selectedNiche}_${Date.now()}.csv`,
-    });
-    if (res.success) {
-      setMessage(`✅ Imported ${res.imported ?? res.keyword_count ?? 0} keywords for ${selectedNiche}${res.skipped ? ` (${res.skipped} skipped)` : ""}`);
-      setCsvText("");
-      loadKeywords();
-    } else {
-      setError(res.detail || res.error || res.message || "Upload failed");
+
+    // Parse client-side
+    const parsed = parseCsv(csvText);
+    if (parsed.keywords.length === 0) {
+      setError(
+        parsed.errors.length > 0
+          ? parsed.errors.join("\n")
+          : "No valid keywords found in the CSV. Check the format and try again."
+      );
+      return;
     }
-    setUploading(false);
+
+    setUploading(true);
+    try {
+      const res = await hermesPost(`/keywords/${selectedNiche}/upload`, {
+        csv_content: csvText,
+        keywords: parsed.keywords,
+        filename: `keywords_${selectedNiche}_${Date.now()}.csv`,
+        format: parsed.format,
+      });
+      if (res.success) {
+        setMessage(
+          `✅ Imported ${res.imported ?? res.keyword_count ?? parsed.keywords.length} keywords for ${selectedNiche}${
+            res.skipped ? ` (${res.skipped} duplicates skipped)` : ""
+          }`
+        );
+        setCsvText("");
+        setParsedPreview(null);
+        loadKeywords();
+      } else {
+        setError(res.detail || res.error || res.message || "Upload failed — check backend logs");
+      }
+    } catch (err) {
+      setError(`Upload failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setUploading(false);
+    }
   };
 
   // Reset keywords
@@ -133,15 +313,35 @@ export default function KeywordsPage() {
     }
   };
 
-  // File drop handler
+  // File handlers
+  const handleFileRead = (file: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string || "";
+      setCsvText(text);
+    };
+    reader.onerror = () => {
+      setError("Failed to read file. Make sure it's a valid text/CSV file.");
+    };
+    reader.readAsText(file);
+  };
+
   const handleFileDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => setCsvText(ev.target?.result as string || "");
-      reader.readAsText(file);
-    }
+    if (file) handleFileRead(file);
+  };
+
+  const handleFileClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFileRead(file);
+    // Reset the input so the same file can be re-selected
+    if (e.target) e.target.value = "";
   };
 
   // Filtered + paginated keywords
@@ -154,6 +354,15 @@ export default function KeywordsPage() {
   const daysLeft = kwStats && kwStats.used > 0
     ? Math.round(kwStats.available / Math.max(kwStats.used / 30, 1))
     : null;
+
+  // Format label for preview
+  const formatLabel = (f: CsvFormat) => {
+    switch (f) {
+      case "pinclicks": return "PinClicks (ID, Label, URL, Volume, Followers)";
+      case "simple": return "Simple (Keyword, Search Volume)";
+      default: return "Unknown";
+    }
+  };
 
   if (loading) {
     return (
@@ -178,8 +387,8 @@ export default function KeywordsPage() {
         </div>
       )}
       {error && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-300 text-sm flex items-center justify-between">
-          {error}<button onClick={() => setError("")} className="ml-2 text-red-400 hover:text-white">✕</button>
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-300 text-sm flex items-center justify-between whitespace-pre-line">
+          {error}<button onClick={() => setError("")} className="ml-2 text-red-400 hover:text-white flex-shrink-0">✕</button>
         </div>
       )}
 
@@ -236,31 +445,31 @@ export default function KeywordsPage() {
       {/* ── Upload Keywords ────────────────────────────────────────────── */}
       <div className="rounded-xl bg-gray-900 border border-gray-800 p-6 space-y-4">
         <h2 className="text-lg font-bold text-yellow-400">📋 Upload Keywords</h2>
-        <p className="text-gray-400 text-sm">
-          Export from PinClicks.com — Format: ID, Label, URL, Search Volume, Followers
-        </p>
+        <div className="text-gray-400 text-sm space-y-1">
+          <p>Supported CSV formats:</p>
+          <ul className="list-disc list-inside text-gray-500 text-xs space-y-0.5 ml-2">
+            <li><span className="text-gray-300">PinClicks export:</span> ID, Label, URL, Search Volume, Followers</li>
+            <li><span className="text-gray-300">Simple format:</span> Keyword, Search Volume</li>
+          </ul>
+        </div>
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,.txt,.tsv"
+          onChange={handleFileChange}
+          className="hidden"
+        />
 
         {/* Dropzone */}
         <div
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleFileDrop}
+          onClick={handleFileClick}
           className="border-2 border-dashed border-gray-700 rounded-xl p-8 text-center hover:border-yellow-500/30 transition cursor-pointer"
-          onClick={() => {
-            const input = document.createElement("input");
-            input.type = "file";
-            input.accept = ".csv,.txt";
-            input.onchange = (e) => {
-              const file = (e.target as HTMLInputElement).files?.[0];
-              if (file) {
-                const reader = new FileReader();
-                reader.onload = (ev) => setCsvText(ev.target?.result as string || "");
-                reader.readAsText(file);
-              }
-            };
-            input.click();
-          }}
         >
-          <p className="text-gray-400 text-sm">Drop your PinClicks CSV here or click to browse</p>
+          <p className="text-gray-400 text-sm">Drop your CSV file here or <span className="text-yellow-400 underline">click to browse</span></p>
           <p className="text-gray-600 text-xs mt-1">Or paste CSV content below</p>
         </div>
 
@@ -268,17 +477,60 @@ export default function KeywordsPage() {
           value={csvText}
           onChange={(e) => setCsvText(e.target.value)}
           rows={5}
-          placeholder="Paste PinClicks CSV content here..."
+          placeholder={"Paste CSV content here...\n\nFormat A: ID,Label,URL,Search Volume,Followers\nFormat B: Keyword,Search Volume"}
           className="w-full rounded-lg bg-gray-800 border border-gray-700 text-white px-3 py-2.5 text-sm placeholder-gray-500 font-mono focus:outline-none focus:border-yellow-500/50 transition resize-y"
         />
 
-        <button
-          onClick={uploadKeywords}
-          disabled={!csvText.trim() || uploading}
-          className="px-5 py-2.5 rounded-lg text-sm font-semibold bg-yellow-500 hover:bg-yellow-400 text-black transition disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {uploading ? <span className="flex items-center gap-2"><Spinner className="text-black" /> Uploading…</span> : "⬆ Upload Keywords"}
-        </button>
+        {/* Parse Preview */}
+        {parsedPreview && csvText.trim() && (
+          <div className={`rounded-lg border px-4 py-3 text-sm ${
+            parsedPreview.keywords.length > 0
+              ? "border-emerald-500/20 bg-emerald-500/5"
+              : "border-red-500/20 bg-red-500/5"
+          }`}>
+            {parsedPreview.keywords.length > 0 ? (
+              <div className="space-y-1">
+                <p className="text-emerald-300">
+                  ✓ Detected format: <span className="font-semibold">{formatLabel(parsedPreview.format)}</span>
+                </p>
+                <p className="text-emerald-400 font-medium">
+                  {parsedPreview.keywords.length} keyword{parsedPreview.keywords.length !== 1 ? "s" : ""} ready to upload
+                </p>
+                {parsedPreview.keywords.length > 0 && (
+                  <p className="text-gray-500 text-xs mt-1">
+                    Preview: {parsedPreview.keywords.slice(0, 3).map(k => k.keyword).join(", ")}
+                    {parsedPreview.keywords.length > 3 ? `, …and ${parsedPreview.keywords.length - 3} more` : ""}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <p className="text-red-300 font-medium">⚠ No valid keywords found</p>
+                {parsedPreview.errors.map((err, i) => (
+                  <p key={i} className="text-red-400/80 text-xs">{err}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={uploadKeywords}
+            disabled={!csvText.trim() || uploading || !selectedNiche || (parsedPreview?.keywords.length ?? 0) === 0}
+            className="px-5 py-2.5 rounded-lg text-sm font-semibold bg-yellow-500 hover:bg-yellow-400 text-black transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {uploading ? <span className="flex items-center gap-2"><Spinner className="text-black" /> Uploading…</span> : "⬆ Upload Keywords"}
+          </button>
+          {csvText.trim() && (
+            <button
+              onClick={() => { setCsvText(""); setParsedPreview(null); }}
+              className="px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white transition"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Keyword List ───────────────────────────────────────────────── */}
