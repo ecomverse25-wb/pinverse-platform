@@ -138,7 +138,6 @@ export default function ProductsPage() {
       const res = await hermesDelete("/products/clear");
       if (res.success) {
         setMessage("Product database cleared");
-        setShowClearModal(false);
         loadProducts();
       } else {
         setError(res.detail || res.error || res.message || "Clear failed");
@@ -147,6 +146,7 @@ export default function ProductsPage() {
       console.error("[Hermes] Clear error:", err);
       setError(`Clear failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
+      setShowClearModal(false);
       setClearing(false);
     }
   };

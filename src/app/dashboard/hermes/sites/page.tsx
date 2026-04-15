@@ -83,16 +83,21 @@ export default function SitesPage() {
       return;
     }
     setSubmitting(true);
-    const res = await hermesPost("/sites", form);
-    if (res.success) {
-      setMessage(`✅ Site "${form.display_name}" added successfully`);
-      setForm({ ...EMPTY_FORM });
-      setShowAddForm(false);
-      loadSites();
-    } else {
-      setError(res.detail || res.error || res.message || "Failed to add site");
+    try {
+      const res = await hermesPost("/sites", form);
+      if (res.success || res.message?.toLowerCase().includes("added")) {
+        setMessage(`✅ Site "${form.display_name || form.niche_id}" added successfully`);
+        setForm({ ...EMPTY_FORM });
+        setShowAddForm(false);
+        loadSites();
+      } else {
+        setError(res.detail || res.error || res.message || "Failed to add site");
+      }
+    } catch (err) {
+      setError(`Failed to add site: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
   const testConnection = async (nicheId: string) => {
@@ -109,15 +114,20 @@ export default function SitesPage() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
-    const res = await hermesDelete(`/sites/${deleteTarget.niche_id}`);
-    if (res.success) {
-      setMessage(`Site "${deleteTarget.name}" removed from Hermes`);
+    try {
+      const res = await hermesDelete(`/sites/${deleteTarget.niche_id}`);
+      if (res.success || res.message?.toLowerCase().includes("removed") || res.message?.toLowerCase().includes("deleted")) {
+        setMessage(`Site "${deleteTarget.name || deleteTarget.niche_id}" removed from Hermes`);
+        loadSites();
+      } else {
+        setError(res.detail || res.error || res.message || "Failed to delete site");
+      }
+    } catch (err) {
+      setError(`Failed to delete site: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
       setDeleteTarget(null);
-      loadSites();
-    } else {
-      setError(res.detail || res.error || res.message || "Failed to delete site");
+      setDeleting(false);
     }
-    setDeleting(false);
   };
 
   const toggleArrayField = (field: "affiliate_programs" | "content_types", value: string) => {

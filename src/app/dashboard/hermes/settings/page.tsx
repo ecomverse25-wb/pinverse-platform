@@ -106,20 +106,25 @@ export default function SettingsPage() {
   const confirmDisable = async () => {
     if (!disableTarget) return;
     setSavingSchedule(true);
-    const res = await hermesPost("/schedule/update", {
-      niche: disableTarget.niche,
-      time: disableTarget.time,
-      count: disableTarget.count,
-      enabled: false,
-    });
-    if (res.success) {
-      setMessage(`Automation disabled for ${disableTarget.niche}`);
+    try {
+      const res = await hermesPost("/schedule/update", {
+        niche: disableTarget.niche,
+        time: disableTarget.time,
+        count: disableTarget.count,
+        enabled: false,
+      });
+      if (res.success) {
+        setMessage(`Automation disabled for ${disableTarget.niche}`);
+        loadData();
+      } else {
+        setError(res.detail || res.error || res.message || "Failed");
+      }
+    } catch (err) {
+      setError(`Failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
       setDisableTarget(null);
-      loadData();
-    } else {
-      setError(res.detail || res.error || res.message || "Failed");
+      setSavingSchedule(false);
     }
-    setSavingSchedule(false);
   };
 
   // Run system health check

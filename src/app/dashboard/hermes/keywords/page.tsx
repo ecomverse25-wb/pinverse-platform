@@ -117,15 +117,20 @@ export default function KeywordsPage() {
   // Reset keywords
   const handleReset = async () => {
     setResetting(true);
-    const res = await hermesDelete(`/keywords/${selectedNiche}/reset`);
-    if (res.success) {
-      setMessage(`Keywords for ${selectedNiche} reset to available`);
+    try {
+      const res = await hermesDelete(`/keywords/${selectedNiche}/reset`);
+      if (res.success) {
+        setMessage(`Keywords for ${selectedNiche} reset to available`);
+        loadKeywords();
+      } else {
+        setError(res.detail || res.error || res.message || "Reset failed");
+      }
+    } catch (err) {
+      setError(`Reset failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
       setShowResetModal(false);
-      loadKeywords();
-    } else {
-      setError(res.detail || res.error || res.message || "Reset failed");
+      setResetting(false);
     }
-    setResetting(false);
   };
 
   // File drop handler
