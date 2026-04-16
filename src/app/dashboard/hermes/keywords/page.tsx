@@ -275,7 +275,8 @@ export default function KeywordsPage() {
     setUploading(true);
     try {
       const res = await hermesPost(`/keywords/${selectedNiche}/upload`, {
-        csv_content: csvText,
+        csv_content: typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(csvText))) : Buffer.from(csvText).toString('base64'),
+        is_base64: true,
         keywords: parsed.keywords,
         filename: `keywords_${selectedNiche}_${Date.now()}.csv`,
         format: parsed.format,

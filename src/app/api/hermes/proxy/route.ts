@@ -887,9 +887,18 @@ export async function POST(req: NextRequest) {
     const kwUploadMatch = typeof reqPath === "string" && reqPath.match(/^\/keywords\/([^/]+)\/upload$/);
     if (kwUploadMatch) {
       const niche = kwUploadMatch[1];
+      
+      const payload = body as Record<string, unknown>;
+      if (payload.is_base64 && typeof payload.csv_content === "string") {
+        try {
+          payload.csv_content = Buffer.from(payload.csv_content, "base64").toString("utf-8");
+          payload.is_base64 = false;
+        } catch { /* ignore */ }
+      }
+
       // Try VPS first
       try {
-        const { data, ok, status } = await hermesRequest(reqPath, "POST", body);
+        const { data, ok, status } = await hermesRequest(reqPath, "POST", payload);
         if (ok && data?.success) return NextResponse.json(data);
         // If 403 or 404, fall through to local handler
         if (status !== 403 && status !== 404) {
@@ -897,7 +906,7 @@ export async function POST(req: NextRequest) {
         }
       } catch { /* VPS unreachable — fall through */ }
       // Local fallback
-      return handleKeywordsUpload(niche, body || {});
+      return handleKeywordsUpload(niche, payload);
     }
 
     // Keywords reset — local-backed handler
