@@ -354,6 +354,70 @@ async function handleProductsSearch(niche: string, query: string): Promise<NextR
   return NextResponse.json({ products: results, success: true });
 }
 
+async function handleProductsSync(niche: string, body: Record<string, unknown>): Promise<NextResponse> {
+  const sitemapUrl = String(body.sitemap_url || body.sitemapUrl || "");
+  if (!sitemapUrl) return NextResponse.json({ error: "No sitemap URL provided", success: false }, { status: 400 });
+
+  try {
+    const res = await fetch(sitemapUrl, { headers: { "User-Agent": "Mozilla/5.0 HermesSync" } });
+    if (!res.ok) {
+      return NextResponse.json({ error: `Failed to fetch sitemap: HTTP ${res.status}`, success: false }, { status: 400 });
+    }
+    const xml = await res.text();
+    
+    // Extract all <loc> tags representing URLs
+    const matches = Array.from(xml.matchAll(/<loc>(.*?)<\/loc>/gi)).map(m => m[1].trim());
+    
+    // Naively filter out common non-product URLs if it's a general sitemap
+    const productUrls = matches.filter(url => {
+      const lower = url.toLowerCase();
+      // Skip known non-product pages
+      if (lower.includes("/page/") || lower.includes("/feed/") || lower.includes("/tag/") || lower.includes("/category/")) return false;
+      // Skip media files inside sitemaps
+      if (lower.match(/\.(jpg|jpeg|png|gif|webp|svg|pdf)$/)) return false;
+      return true;
+    });
+
+    if (productUrls.length === 0) {
+      return NextResponse.json({ error: "No valid product URLs found in the sitemap", success: false }, { status: 400 });
+    }
+
+    const store = await readProducts();
+    const existing = store[niche]?.products || [];
+    const existingUrls = new Set(existing.map((p) => p.url.toLowerCase()));
+
+    const newProducts: LocalProduct[] = productUrls
+      .filter((url) => !existingUrls.has(url.toLowerCase()))
+      .map((url) => {
+        // Extract a readable title from the URL slug
+        const slug = url.replace(/\/$/, "").split("/").pop() || "";
+        const title = slug.replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+        return {
+          title,
+          url,
+          description: "",
+          price: "",
+          last_fetched: new Date().toISOString(),
+        };
+      });
+
+    store[niche] = {
+      products: [...existing, ...newProducts],
+      last_synced: new Date().toISOString(),
+    };
+    await writeProducts(store);
+
+    return NextResponse.json({
+      success: true,
+      imported: newProducts.length,
+      total: store[niche].products.length,
+      message: `Successfully synced ${newProducts.length} new products from sitemap`,
+    });
+  } catch (err) {
+    return NextResponse.json({ error: `Sitemap sync error: ${String(err)}`, success: false }, { status: 500 });
+  }
+}
+
 async function handleProductsClear(niche: string): Promise<NextResponse> {
   const store = await readProducts();
   const count = store[niche]?.products?.length || 0;
@@ -936,8 +1000,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Products sync — pass niche through to VPS, no local fallback needed for sync
-
+    // Products sync — local fallback using built-in XML scraping
+    if (typeof reqPath === "string" && (reqPath === "/products/sync" || reqPath === "/products/sync/")) {
+      const niche = String(body?.niche || "");
+      if (niche) {
+        try {
+          const { data, ok, status } = await hermesRequest(reqPath, "POST", body);
+          if (ok && data?.success) return NextResponse.json(data);
+          if (status !== 403 && status !== 404 && status !== 502) return NextResponse.json(data, { status });
+        } catch { /* fall through */ }
+        return handleProductsSync(niche, body || {});
+      }
+    }
     const { data, ok, status } = await hermesRequest(reqPath, "POST", body);
     return NextResponse.json(data, ok ? undefined : { status });
   } catch (err) {
