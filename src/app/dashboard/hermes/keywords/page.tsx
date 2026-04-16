@@ -139,6 +139,11 @@ function parseCsv(csvText: string): {
       continue;
     }
 
+    if (searchVolume < 100) {
+      errors.push(`Line ${i + 1}: search volume ${searchVolume} < 100, skipped`);
+      continue;
+    }
+
     const normalizedKey = keyword.toLowerCase();
     if (seen.has(normalizedKey)) {
       continue; // Skip duplicates silently

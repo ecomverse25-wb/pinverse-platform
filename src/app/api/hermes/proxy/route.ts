@@ -1,19 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase-server";
-import { promises as fs } from "fs";
-import path from "path";
+import { hermesRead, hermesWrite } from "@/lib/hermes-storage";
 
 const HERMES_URL = process.env.HERMES_API_URL || "http://34.62.198.158:8080";
 const HERMES_KEY = process.env.HERMES_API_KEY || "";
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "";
 
-// ─── Local Sites Store (fallback when VPS lacks /sites endpoints) ────────────
-// Sites are stored in a JSON file so they survive restarts.
-const SITES_FILE = path.join(process.cwd(), ".hermes-sites.json");
-const KEYWORDS_FILE = path.join(process.cwd(), ".hermes-keywords.json");
-const SETTINGS_FILE = path.join(process.cwd(), ".hermes-settings.json");
-const BUDGET_FILE = path.join(process.cwd(), ".hermes-budget.json");
-const SCHEDULE_FILE = path.join(process.cwd(), ".hermes-schedule.json");
+// ─── Hermes Data Persistence ─────────────────────────────────────────────────
+// All data is stored in Supabase Storage (S3-backed), with filesystem fallback
+// for local development. See src/lib/hermes-storage.ts for implementation.
 
 interface LocalSite {
   id: string;
@@ -35,16 +30,11 @@ interface LocalSite {
 }
 
 async function readSites(): Promise<LocalSite[]> {
-  try {
-    const raw = await fs.readFile(SITES_FILE, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
+  return hermesRead<LocalSite[]>("sites", []);
 }
 
 async function writeSites(sites: LocalSite[]): Promise<void> {
-  await fs.writeFile(SITES_FILE, JSON.stringify(sites, null, 2), "utf-8");
+  await hermesWrite("sites", sites);
 }
 
 // ─── Local Keywords Store (fallback when VPS lacks keyword endpoints) ────────
@@ -66,16 +56,11 @@ interface KeywordsStore {
 }
 
 async function readKeywords(): Promise<KeywordsStore> {
-  try {
-    const raw = await fs.readFile(KEYWORDS_FILE, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
+  return hermesRead<KeywordsStore>("keywords", {});
 }
 
 async function writeKeywords(store: KeywordsStore): Promise<void> {
-  await fs.writeFile(KEYWORDS_FILE, JSON.stringify(store, null, 2), "utf-8");
+  await hermesWrite("keywords", store);
 }
 
 // Parse CSV content supporting two formats:
@@ -133,6 +118,9 @@ function parseCsvToKeywords(csvContent: string, niche: string): LocalKeyword[] {
     }
 
     if (!keyword) continue;
+
+    // Skip keywords with fewer than 100 monthly searches
+    if (searchVolume < 100) continue;
 
     // Skip duplicates
     const normalizedKey = keyword.toLowerCase();
