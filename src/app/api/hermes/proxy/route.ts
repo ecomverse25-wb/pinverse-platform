@@ -275,8 +275,6 @@ async function handleKeywordsReset(niche: string): Promise<NextResponse> {
 
 // ─── Local Products Store (fallback per-site) ────────────────────────────────
 
-const PRODUCTS_FILE = path.join(process.cwd(), ".hermes-products.json");
-
 interface LocalProduct {
   title: string;
   url: string;
@@ -293,16 +291,11 @@ interface ProductsStore {
 }
 
 async function readProducts(): Promise<ProductsStore> {
-  try {
-    const raw = await fs.readFile(PRODUCTS_FILE, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
+  return hermesRead<ProductsStore>("products", {});
 }
 
 async function writeProducts(store: ProductsStore): Promise<void> {
-  await fs.writeFile(PRODUCTS_FILE, JSON.stringify(store, null, 2), "utf-8");
+  await hermesWrite("products", store);
 }
 
 async function handleProductsGet(niche: string): Promise<NextResponse> {
@@ -388,16 +381,12 @@ const DEFAULT_SETTINGS: LocalSettings = {
 };
 
 async function readSettings(): Promise<LocalSettings> {
-  try {
-    const raw = await fs.readFile(SETTINGS_FILE, "utf-8");
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
-  } catch {
-    return { ...DEFAULT_SETTINGS };
-  }
+  const custom = await hermesRead<Partial<LocalSettings>>("settings", {});
+  return { ...DEFAULT_SETTINGS, ...custom };
 }
 
 async function writeSettings(settings: LocalSettings): Promise<void> {
-  await fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2), "utf-8");
+  await hermesWrite("settings", settings);
 }
 
 async function handleSettingsGet(): Promise<NextResponse> {
@@ -449,16 +438,12 @@ const DEFAULT_BUDGET: LocalBudget = {
 };
 
 async function readBudget(): Promise<LocalBudget> {
-  try {
-    const raw = await fs.readFile(BUDGET_FILE, "utf-8");
-    return { ...DEFAULT_BUDGET, ...JSON.parse(raw) };
-  } catch {
-    return { ...DEFAULT_BUDGET };
-  }
+  const custom = await hermesRead<Partial<LocalBudget>>("budget", {});
+  return { ...DEFAULT_BUDGET, ...custom };
 }
 
 async function writeBudget(budget: LocalBudget): Promise<void> {
-  await fs.writeFile(BUDGET_FILE, JSON.stringify(budget, null, 2), "utf-8");
+  await hermesWrite("budget", budget);
 }
 
 async function handleBudgetGet(): Promise<NextResponse> {
@@ -492,16 +477,11 @@ interface LocalScheduleJob {
 }
 
 async function readSchedule(): Promise<LocalScheduleJob[]> {
-  try {
-    const raw = await fs.readFile(SCHEDULE_FILE, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
+  return hermesRead<LocalScheduleJob[]>("schedule", []);
 }
 
 async function writeSchedule(jobs: LocalScheduleJob[]): Promise<void> {
-  await fs.writeFile(SCHEDULE_FILE, JSON.stringify(jobs, null, 2), "utf-8");
+  await hermesWrite("schedule", jobs);
 }
 
 async function handleScheduleGet(): Promise<NextResponse> {
