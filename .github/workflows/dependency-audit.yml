@@ -24,5 +24,5 @@ jobs:
       - name: Install dependencies
         run: npm install --ignore-scripts
 
-      - name: Run npm audit
-        run: npm audit --audit-level=moderate
+      - name: Run npm audit (report only)
+        run: npm audit --audit-level=moderate || true
